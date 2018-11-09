@@ -142,9 +142,13 @@ namespace cv
 CV_EXPORTS void scalarToRawData(const cv::Scalar& s, void* buf, int type, int unroll_to = 0);
 
 //! Allocate all memory buffers which will not be freed, ease filtering memcheck issues
-template <typename T>
-T* allocSingleton(size_t count) { return static_cast<T*>(fastMalloc(sizeof(T) * count)); }
-}
+CV_EXPORTS void* allocSingletonBuffer(size_t size);
+
+//! Allocate all memory buffers which will not be freed, ease filtering memcheck issues
+template <typename T> static inline
+T* allocSingleton(size_t count = 1) { return static_cast<T*>(allocSingletonBuffer(sizeof(T) * count)); }
+
+} // namespace
 
 #if 1 // TODO: Remove in OpenCV 4.x
 
@@ -190,8 +194,8 @@ T* allocSingleton(size_t count) { return static_cast<T*>(fastMalloc(sizeof(T) * 
 #define IPP_DISABLE_LAB_RGB             1 // breaks OCL accuracy tests
 #define IPP_DISABLE_RGB_XYZ             1 // big accuracy difference
 #define IPP_DISABLE_XYZ_RGB             1 // big accuracy difference
-#define IPP_DISABLE_HAAR                1 // improper integration/results
 #define IPP_DISABLE_HOUGH               1 // improper integration/results
+#define IPP_DISABLE_FILTER2D_BIG_MASK   1 // different results on masks > 7x7
 
 #define IPP_DISABLE_GAUSSIANBLUR_PARALLEL 1 // not supported (2017u2 / 2017u3)
 
@@ -225,7 +229,9 @@ T* allocSingleton(size_t count) { return static_cast<T*>(fastMalloc(sizeof(T) * 
 #  pragma GCC diagnostic ignored "-Wsuggest-override"
 #  endif
 #include "iw++/iw.hpp"
+#  ifdef HAVE_IPP_IW_LL
 #include "iw/iw_ll.h"
+#  endif
 #  if defined(__OPENCV_BUILD) && defined(__GNUC__) && __GNUC__ >= 5
 #  pragma GCC diagnostic pop
 #  endif
@@ -704,12 +710,12 @@ CV_EXPORTS InstrNode*   getCurrentNode();
     if(::cv::instr::useInstrumentation()){\
         ::cv::instr::IntrumentationRegion __instr__(#FUN, __FILE__, __LINE__, NULL, false, TYPE, IMPL);\
         try{\
-            auto status = ((FUN)(__VA_ARGS__));\
+            auto instrStatus = ((FUN)(__VA_ARGS__));\
             if(ERROR_COND){\
                 ::cv::instr::getCurrentNode()->m_payload.m_funError = true;\
                 CV_INSTRUMENT_MARK_META(IMPL, #FUN " - BadExit");\
             }\
-            return status;\
+            return instrStatus;\
         }catch(...){\
             ::cv::instr::getCurrentNode()->m_payload.m_funError = true;\
             CV_INSTRUMENT_MARK_META(IMPL, #FUN " - BadExit");\
@@ -750,7 +756,7 @@ CV_EXPORTS InstrNode*   getCurrentNode();
 // Wrapper region instrumentation macro
 #define CV_INSTRUMENT_REGION_IPP();          CV_INSTRUMENT_REGION_META(__FUNCTION__, false, ::cv::instr::TYPE_WRAPPER, ::cv::instr::IMPL_IPP)
 // Function instrumentation macro
-#define CV_INSTRUMENT_FUN_IPP(FUN, ...)     CV_INSTRUMENT_FUN_RT_META(::cv::instr::TYPE_FUN, ::cv::instr::IMPL_IPP, status < 0, FUN, __VA_ARGS__)
+#define CV_INSTRUMENT_FUN_IPP(FUN, ...)     CV_INSTRUMENT_FUN_RT_META(::cv::instr::TYPE_FUN, ::cv::instr::IMPL_IPP, instrStatus < 0, FUN, __VA_ARGS__)
 // Diagnostic markers
 #define CV_INSTRUMENT_MARK_IPP(NAME)        CV_INSTRUMENT_MARK_META(::cv::instr::IMPL_IPP, NAME)
 

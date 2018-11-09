@@ -267,6 +267,8 @@ struct buffer
 
 struct CvCaptureCAM_V4L CV_FINAL : public CvCapture
 {
+    int getCaptureDomain() /*const*/ CV_OVERRIDE { return cv::CAP_V4L; }
+
     int deviceHandle;
     int bufferIndex;
     int FirstCapture;
@@ -1741,7 +1743,7 @@ static bool icvSetControl (CvCaptureCAM_V4L* capture,
         fprintf(stderr,
                 "VIDEOIO ERROR: V4L2: setting property #%d is not supported\n",
                 property_id);
-        return -1;
+        return false;
     }
 
     /* get the min/max values */

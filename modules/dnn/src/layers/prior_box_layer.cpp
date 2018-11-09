@@ -43,6 +43,7 @@
 #include "../precomp.hpp"
 #include "layers_common.hpp"
 #include "../op_inf_engine.hpp"
+#include "../op_vkcom.hpp"
 #include <float.h>
 #include <algorithm>
 #include <cmath>
@@ -271,7 +272,8 @@ public:
     virtual bool supportBackend(int backendId) CV_OVERRIDE
     {
         return backendId == DNN_BACKEND_OPENCV ||
-               backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine();
+               backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine() ||
+               backendId == DNN_BACKEND_VKCOM && haveVulkan();
     }
 
     bool getMemoryShapes(const std::vector<MatShape> &inputs,
@@ -402,8 +404,7 @@ public:
         CV_TRACE_FUNCTION();
         CV_TRACE_ARG_VALUE(name, "name", name.c_str());
 
-        CV_OCL_RUN(IS_DNN_OPENCL_TARGET(preferableTarget) &&
-                   OCL_PERFORMANCE_CHECK(ocl::Device::getDefault().isIntel()),
+        CV_OCL_RUN(IS_DNN_OPENCL_TARGET(preferableTarget),
                    forward_ocl(inputs_arr, outputs_arr, internals_arr))
 
         if (inputs_arr.depth() == CV_16S)
@@ -479,6 +480,19 @@ public:
                 }
             }
         }
+    }
+
+    virtual Ptr<BackendNode> initVkCom(const std::vector<Ptr<BackendWrapper> > &input) CV_OVERRIDE
+    {
+#ifdef HAVE_VULKAN
+        std::shared_ptr<vkcom::OpBase> op(new vkcom::OpPriorBox(_stepX, _stepY,
+                                                                _clip, _numPriors,
+                                                                _variance, _offsetsX,
+                                                                _offsetsY, _boxWidths,
+                                                                _boxHeights));
+        return Ptr<BackendNode>(new VkComBackendNode(input, op));
+#endif // HAVE_VULKAN
+        return Ptr<BackendNode>();
     }
 
     virtual Ptr<BackendNode> initInfEngine(const std::vector<Ptr<BackendWrapper> >&) CV_OVERRIDE

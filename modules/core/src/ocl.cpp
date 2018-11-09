@@ -238,6 +238,20 @@ static const bool CV_OPENCL_DISABLE_BUFFER_RECT_OPERATIONS = utils::getConfigura
 #endif
 );
 
+static const String getBuildExtraOptions()
+{
+    static String param_buildExtraOptions;
+    static bool initialized = false;
+    if (!initialized)
+    {
+        param_buildExtraOptions = utils::getConfigurationParameterString("OPENCV_OPENCL_BUILD_EXTRA_OPTIONS", "");
+        initialized = true;
+        if (!param_buildExtraOptions.empty())
+            CV_LOG_WARNING(NULL, "OpenCL: using extra build options: '" << param_buildExtraOptions << "'");
+    }
+    return param_buildExtraOptions;
+}
+
 #endif // HAVE_OPENCL
 
 struct UMat2D
@@ -3073,7 +3087,7 @@ bool Kernel::run(int dims, size_t _globalsize[], size_t _localsize[],
             dims == 1 ? 64 : dims == 2 ? (i == 0 ? 256 : 8) : dims == 3 ? (8>>(int)(i>0)) : 1;
         CV_Assert( val > 0 );
         total *= _globalsize[i];
-        if (_globalsize[i] == 1)
+        if (_globalsize[i] == 1 && !_localsize)
             val = 1;
         globalsize[i] = divUp(_globalsize[i], (unsigned int)val) * val;
     }
@@ -3086,7 +3100,7 @@ bool Kernel::run(int dims, size_t _globalsize[], size_t _localsize[],
 bool Kernel::Impl::run(int dims, size_t globalsize[], size_t localsize[],
         bool sync, int64* timeNS, const Queue& q)
 {
-    CV_INSTRUMENT_REGION_OPENCL_RUN(name.c_str(););
+    CV_INSTRUMENT_REGION_OPENCL_RUN(name.c_str());
 
     if (!handle || isInProgress)
         return false;
@@ -3517,6 +3531,9 @@ struct Program::Impl
                 buildflags = joinBuildOptions(buildflags, " -D AMD_DEVICE");
             else if (device.isIntel())
                 buildflags = joinBuildOptions(buildflags, " -D INTEL_DEVICE");
+            const String param_buildExtraOptions = getBuildExtraOptions();
+            if (!param_buildExtraOptions.empty())
+                buildflags = joinBuildOptions(buildflags, param_buildExtraOptions);
         }
         compile(ctx, src_, errmsg);
     }
@@ -4759,6 +4776,10 @@ public:
 
     void deallocate_(UMatData* u) const
     {
+#ifdef _WIN32
+        if (cv::__termination)  // process is not in consistent state (after ExitProcess call) and terminating
+            return;             // avoid any OpenCL calls
+#endif
         if(u->tempUMat())
         {
             CV_Assert(u->origdata);
@@ -5981,10 +6002,13 @@ const char* typeToStr(int type)
         "int", "int2", "int3", "int4", 0, 0, 0, "int8", 0, 0, 0, 0, 0, 0, 0, "int16",
         "float", "float2", "float3", "float4", 0, 0, 0, "float8", 0, 0, 0, 0, 0, 0, 0, "float16",
         "double", "double2", "double3", "double4", 0, 0, 0, "double8", 0, 0, 0, 0, 0, 0, 0, "double16",
-        "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?"
+        "half", "half2", "half3", "half4", 0, 0, 0, "half8", 0, 0, 0, 0, 0, 0, 0, "half16",
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     };
     int cn = CV_MAT_CN(type), depth = CV_MAT_DEPTH(type);
-    return cn > 16 ? "?" : tab[depth*16 + cn-1];
+    const char* result = cn > 16 ? 0 : tab[depth*16 + cn-1];
+    CV_Assert(result);
+    return result;
 }
 
 const char* memopTypeToStr(int type)
@@ -5998,10 +6022,13 @@ const char* memopTypeToStr(int type)
         "int", "int2", "int3", "int4", 0, 0, 0, "int8", 0, 0, 0, 0, 0, 0, 0, "int16",
         "int", "int2", "int3", "int4", 0, 0, 0, "int8", 0, 0, 0, 0, 0, 0, 0, "int16",
         "ulong", "ulong2", "ulong3", "ulong4", 0, 0, 0, "ulong8", 0, 0, 0, 0, 0, 0, 0, "ulong16",
-        "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?"
+        "short", "short2", "short3", "short4", 0, 0, 0, "short8", 0, 0, 0, 0, 0, 0, 0, "short16",
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     };
     int cn = CV_MAT_CN(type), depth = CV_MAT_DEPTH(type);
-    return cn > 16 ? "?" : tab[depth*16 + cn-1];
+    const char* result = cn > 16 ? 0 : tab[depth*16 + cn-1];
+    CV_Assert(result);
+    return result;
 }
 
 const char* vecopTypeToStr(int type)
@@ -6015,10 +6042,13 @@ const char* vecopTypeToStr(int type)
         "int", "int2", "int3", "int4", 0, 0, 0, "int8", 0, 0, 0, 0, 0, 0, 0, "int16",
         "int", "int2", "int3", "int4", 0, 0, 0, "int8", 0, 0, 0, 0, 0, 0, 0, "int16",
         "ulong", "ulong2", "ulong3", "ulong4", 0, 0, 0, "ulong8", 0, 0, 0, 0, 0, 0, 0, "ulong16",
-        "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?"
+        "short", "short2", "short3", "short4", 0, 0, 0, "short8", 0, 0, 0, 0, 0, 0, 0, "short16",
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     };
     int cn = CV_MAT_CN(type), depth = CV_MAT_DEPTH(type);
-    return cn > 16 ? "?" : tab[depth*16 + cn-1];
+    const char* result = cn > 16 ? 0 : tab[depth*16 + cn-1];
+    CV_Assert(result);
+    return result;
 }
 
 const char* convertTypeStr(int sdepth, int ddepth, int cn, char* buf)

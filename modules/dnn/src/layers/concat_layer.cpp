@@ -44,6 +44,7 @@
 #include "layers_common.hpp"
 #include "../op_halide.hpp"
 #include "../op_inf_engine.hpp"
+#include "../op_vkcom.hpp"
 
 #ifdef HAVE_OPENCL
 #include "opencl_kernels_dnn.hpp"
@@ -105,7 +106,8 @@ public:
     {
         return backendId == DNN_BACKEND_OPENCV ||
                backendId == DNN_BACKEND_HALIDE && haveHalide() && axis == 1 && !padding ||  // By channels
-               backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine() && !padding;
+               backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine() && !padding ||
+               backendId == DNN_BACKEND_VKCOM && haveVulkan() && !padding;
     }
 
     class ChannelConcatInvoker : public ParallelLoopBody
@@ -237,15 +239,8 @@ public:
         CV_TRACE_FUNCTION();
         CV_TRACE_ARG_VALUE(name, "name", name.c_str());
 
-        CV_OCL_RUN(IS_DNN_OPENCL_TARGET(preferableTarget) &&
-                   OCL_PERFORMANCE_CHECK(ocl::Device::getDefault().isIntel()),
+        CV_OCL_RUN(IS_DNN_OPENCL_TARGET(preferableTarget),
                    forward_ocl(inputs_arr, outputs_arr, internals_arr))
-
-        if (inputs_arr.depth() == CV_16S)
-        {
-            forward_fallback(inputs_arr, outputs_arr, internals_arr);
-            return;
-        }
 
         std::vector<Mat> inputs, outputs;
         inputs_arr.getMatVector(inputs);
@@ -280,6 +275,16 @@ public:
                 ranges[cAxis].start = ranges[cAxis].end;
             }
         }
+    }
+    virtual Ptr<BackendNode> initVkCom(const std::vector<Ptr<BackendWrapper> > &input) CV_OVERRIDE
+    {
+#ifdef HAVE_VULKAN
+        vkcom::Tensor in = VkComTensor(input[0]);
+        int cAxis = clamp(axis, in.dimNum());
+        std::shared_ptr<vkcom::OpBase> op(new vkcom::OpConcat(cAxis));
+        return Ptr<BackendNode>(new VkComBackendNode(input, op));
+#endif // HAVE_VULKAN
+        return Ptr<BackendNode>();
     }
 
     virtual Ptr<BackendNode> initHalide(const std::vector<Ptr<BackendWrapper> > &input) CV_OVERRIDE

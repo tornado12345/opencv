@@ -10,9 +10,8 @@
 
 #include <vector>
 
+#include "opencv2/gapi/opencv_includes.hpp"
 #include "opencv2/gapi/own/assert.hpp"
-#include "opencv2/core/mat.hpp"
-
 #include "opencv2/gapi/garg.hpp"
 
 namespace cv {
@@ -36,19 +35,23 @@ public:
     GCompiled();
 
     void operator() (GRunArgs &&ins, GRunArgsP &&outs);          // Generic arg-to-arg
+#if !defined(GAPI_STANDALONE)
     void operator() (cv::Mat in, cv::Mat &out);                  // Unary overload
     void operator() (cv::Mat in, cv::Scalar &out);               // Unary overload (scalar)
     void operator() (cv::Mat in1, cv::Mat in2, cv::Mat &out);    // Binary overload
     void operator() (cv::Mat in1, cv::Mat in2, cv::Scalar &out); // Binary overload (scalar)
     void operator() (const std::vector<cv::Mat> &ins,            // Compatibility overload
                      const std::vector<cv::Mat> &outs);
-
+#endif  // !defined(GAPI_STANDALONE)
     Priv& priv();
 
     explicit operator bool () const; // Check if GCompiled is runnable or empty
 
     const GMetaArgs& metas() const; // Meta passed to compile()
     const GMetaArgs& outMetas() const; // Inferred output metadata
+
+    bool canReshape() const; // is reshape mechanism supported by GCompiled
+    void reshape(const GMetaArgs& inMetas, const GCompileArgs& args); // run reshape procedure
 
 protected:
     std::shared_ptr<Priv> m_priv;

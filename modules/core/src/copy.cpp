@@ -90,20 +90,21 @@ copyMask_<uchar>(const uchar* _src, size_t sstep, const uchar* mask, size_t mste
         const uchar* src = (const uchar*)_src;
         uchar* dst = (uchar*)_dst;
         int x = 0;
-        #if CV_SIMD128
+        #if CV_SIMD
         {
-            v_uint8x16 v_zero = v_setzero_u8();
+            v_uint8 v_zero = vx_setzero_u8();
 
-            for( ; x <= size.width - 16; x += 16 )
+            for( ; x <= size.width - v_uint8::nlanes; x += v_uint8::nlanes )
             {
-                v_uint8x16 v_src   = v_load(src  + x),
-                           v_dst   = v_load(dst  + x),
-                           v_nmask = v_load(mask + x) == v_zero;
+                v_uint8 v_src   = vx_load(src  + x),
+                        v_dst   = vx_load(dst  + x),
+                        v_nmask = vx_load(mask + x) == v_zero;
 
                 v_dst = v_select(v_nmask, v_dst, v_src);
                 v_store(dst + x, v_dst);
             }
         }
+        vx_cleanup();
         #endif
         for( ; x < size.width; x++ )
             if( mask[x] )
@@ -121,25 +122,26 @@ copyMask_<ushort>(const uchar* _src, size_t sstep, const uchar* mask, size_t mst
         const ushort* src = (const ushort*)_src;
         ushort* dst = (ushort*)_dst;
         int x = 0;
-        #if CV_SIMD128
+        #if CV_SIMD
         {
-            v_uint8x16 v_zero = v_setzero_u8();
+            v_uint8 v_zero = vx_setzero_u8();
 
-            for( ; x <= size.width - 16; x += 16 )
+            for( ; x <= size.width - v_uint8::nlanes; x += v_uint8::nlanes )
             {
-                v_uint16x8 v_src1 = v_load(src + x), v_src2 = v_load(src + x + 8),
-                           v_dst1 = v_load(dst + x), v_dst2 = v_load(dst + x + 8);
+                v_uint16 v_src1 = vx_load(src + x), v_src2 = vx_load(src + x + v_uint16::nlanes),
+                         v_dst1 = vx_load(dst + x), v_dst2 = vx_load(dst + x + v_uint16::nlanes);
 
-                v_uint8x16 v_nmask1, v_nmask2;
-                v_uint8x16 v_nmask = v_load(mask + x) == v_zero;
+                v_uint8 v_nmask1, v_nmask2;
+                v_uint8 v_nmask = vx_load(mask + x) == v_zero;
                 v_zip(v_nmask, v_nmask, v_nmask1, v_nmask2);
 
                 v_dst1 = v_select(v_reinterpret_as_u16(v_nmask1), v_dst1, v_src1);
                 v_dst2 = v_select(v_reinterpret_as_u16(v_nmask2), v_dst2, v_src2);
                 v_store(dst + x, v_dst1);
-                v_store(dst + x + 8, v_dst2);
+                v_store(dst + x + v_uint16::nlanes, v_dst2);
             }
         }
+        vx_cleanup();
         #endif
         for( ; x < size.width; x++ )
             if( mask[x] )
@@ -326,7 +328,7 @@ void Mat::copyTo( OutputArray _dst ) const
 #ifdef HAVE_IPP
 static bool ipp_copyTo(const Mat &src, Mat &dst, const Mat &mask)
 {
-#ifdef HAVE_IPP_IW
+#ifdef HAVE_IPP_IW_LL
     CV_INSTRUMENT_REGION_IPP();
 
     if(mask.channels() > 1 || mask.depth() != CV_8U)
@@ -461,7 +463,7 @@ Mat& Mat::operator = (const Scalar& s)
 #ifdef HAVE_IPP
 static bool ipp_Mat_setTo_Mat(Mat &dst, Mat &_val, Mat &mask)
 {
-#ifdef HAVE_IPP_IW
+#ifdef HAVE_IPP_IW_LL
     CV_INSTRUMENT_REGION_IPP();
 
     if(mask.empty())
@@ -727,7 +729,7 @@ static bool ipp_flip(Mat &src, Mat &dst, int flip_mode)
 
         CV_INSTRUMENT_FUN_IPP(::ipp::iwiMirror, iwSrc, iwDst, ippMode);
     }
-    catch(::ipp::IwException)
+    catch(const ::ipp::IwException &)
     {
         return false;
     }
@@ -1150,7 +1152,7 @@ namespace cv {
 static bool ipp_copyMakeBorder( Mat &_src, Mat &_dst, int top, int bottom,
                                 int left, int right, int _borderType, const Scalar& value )
 {
-#if defined HAVE_IPP_IW && !IPP_DISABLE_PERF_COPYMAKE
+#if defined HAVE_IPP_IW_LL && !IPP_DISABLE_PERF_COPYMAKE
     CV_INSTRUMENT_REGION_IPP();
 
     ::ipp::IwiBorderSize borderSize(left, top, right, bottom);

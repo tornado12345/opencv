@@ -5,6 +5,8 @@
 // Copyright (C) 2018 Intel Corporation
 
 
+#include "precomp.hpp"
+
 #include "opencv2/gapi/gscalar.hpp"
 #include "opencv2/gapi/gcall.hpp"
 #include "opencv2/gapi/gkernel.hpp"
@@ -71,7 +73,7 @@ GMat dilate3x3(const GMat& src, int iterations,
     return dilate(src, cv::Mat(), cv::Point(-1,-1), iterations, borderType, borderValue);
 }
 
-GMat sobel(const GMat& src, int ddepth, int dx, int dy, int ksize,
+GMat Sobel(const GMat& src, int ddepth, int dx, int dy, int ksize,
            double scale, double delta,
            int borderType, const Scalar& bordVal)
 {

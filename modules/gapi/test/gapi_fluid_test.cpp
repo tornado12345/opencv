@@ -50,8 +50,8 @@ TEST(FluidBuffer, InputTest)
     const cv::Size buffer_size = {8,8};
     cv::Mat in_mat = cv::Mat::eye(buffer_size, CV_8U);
 
-    cv::gapi::fluid::Buffer buffer(in_mat, true);
-    cv::gapi::fluid::View  view = buffer.mkView(1, 0, {}, false);
+    cv::gapi::fluid::Buffer buffer(to_own(in_mat), true);
+    cv::gapi::fluid::View  view = buffer.mkView(0, {});
     view.priv().reset(1);
     int this_y = 0;
 
@@ -74,7 +74,7 @@ TEST(FluidBuffer, CircularTest)
 
     cv::gapi::fluid::Buffer buffer(cv::GMatDesc{CV_8U,1,buffer_size}, 3, 1, 0, 1,
         util::make_optional(cv::gapi::fluid::Border{cv::BORDER_CONSTANT, cv::gapi::own::Scalar(255)}));
-    cv::gapi::fluid::View view = buffer.mkView(3, 1, {}, false);
+    cv::gapi::fluid::View view = buffer.mkView(1, {});
     view.priv().reset(3);
     buffer.debug(std::cout);
 
@@ -152,7 +152,7 @@ TEST(FluidBuffer, OutputTest)
     const cv::Size buffer_size = {8,16};
     cv::Mat out_mat = cv::Mat(buffer_size, CV_8U);
 
-    cv::gapi::fluid::Buffer buffer(out_mat, false);
+    cv::gapi::fluid::Buffer buffer(to_own(out_mat), false);
     int num_writes = 0;
     while (num_writes < buffer_size.height)
     {
@@ -417,7 +417,7 @@ TEST(Fluid, MultipleReaders_DifferentLatency)
     EXPECT_EQ(0, cv::countNonZero(out_mat_gapi != out_mat_ocv));
 }
 
-TEST(Fluid, DISABLED_MultipleOutputs)
+TEST(Fluid, MultipleOutputs)
 {
     // in -> AddC -> a -> AddC ------------------> out1
     //               `--> Id7x7  --> b --> AddC -> out2
@@ -464,7 +464,7 @@ TEST(Fluid, EmptyOutputMatTest)
 }
 
 struct LPISequenceTest : public TestWithParam<int>{};
-TEST_P(LPISequenceTest, DISABLED_LPISequenceTest)
+TEST_P(LPISequenceTest, LPISequenceTest)
 {
     // in -> AddC -> a -> Blur (2lpi) -> out
 

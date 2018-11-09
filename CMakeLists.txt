@@ -96,6 +96,10 @@ if(POLICY CMP0051)
   cmake_policy(SET CMP0051 NEW)
 endif()
 
+if(POLICY CMP0054)  # CMake 3.1: Only interpret if() arguments as variables or keywords when unquoted.
+  cmake_policy(SET CMP0054 NEW)
+endif()
+
 if(POLICY CMP0056)
   cmake_policy(SET CMP0056 NEW)
 endif()
@@ -216,7 +220,6 @@ OCV_OPTION(BUILD_ITT                "Build Intel ITT from source"        NOT MIN
 # ===================================================
 OCV_OPTION(WITH_1394           "Include IEEE1394 support"                    ON   IF (NOT ANDROID AND NOT IOS AND NOT WINRT) )
 OCV_OPTION(WITH_AVFOUNDATION   "Use AVFoundation for Video I/O (iOS/Mac)"    ON   IF APPLE)
-OCV_OPTION(WITH_CARBON         "Use Carbon for UI instead of Cocoa"          OFF  IF APPLE )
 OCV_OPTION(WITH_CAROTENE       "Use NVidia carotene acceleration library for ARM platform"                   ON  IF (ARM OR AARCH64) AND NOT IOS AND NOT (CMAKE_VERSION VERSION_LESS "2.8.11"))
 OCV_OPTION(WITH_CPUFEATURES    "Use cpufeatures Android library"             ON   IF ANDROID)
 OCV_OPTION(WITH_VTK            "Include VTK library support (and build opencv_viz module eiher)"             ON  IF (NOT ANDROID AND NOT IOS AND NOT WINRT AND NOT CMAKE_CROSSCOMPILING) )
@@ -225,7 +228,6 @@ OCV_OPTION(WITH_CUFFT          "Include NVidia Cuda Fast Fourier Transform (FFT)
 OCV_OPTION(WITH_CUBLAS         "Include NVidia Cuda Basic Linear Algebra Subprograms (BLAS) library support" ON IF (NOT IOS AND NOT WINRT) )
 OCV_OPTION(WITH_NVCUVID        "Include NVidia Video Decoding library support"                               ON IF (NOT IOS AND NOT APPLE) )
 OCV_OPTION(WITH_EIGEN          "Include Eigen2/Eigen3 support"               (NOT CV_DISABLE_OPTIMIZATION)       IF (NOT WINRT AND NOT CMAKE_CROSSCOMPILING) )
-OCV_OPTION(WITH_VFW            "Include Video for Windows support"           ON   IF WIN32 )
 OCV_OPTION(WITH_FFMPEG         "Include FFMPEG support"                      ON   IF (NOT ANDROID AND NOT IOS AND NOT WINRT) )
 OCV_OPTION(WITH_GSTREAMER      "Include Gstreamer support"                   ON   IF (NOT ANDROID AND NOT IOS AND NOT WINRT) )
 OCV_OPTION(WITH_GSTREAMER_0_10 "Enable Gstreamer 0.10 support (instead of 1.x)"                              OFF )
@@ -233,6 +235,7 @@ OCV_OPTION(WITH_GTK            "Include GTK support"                         ON 
 OCV_OPTION(WITH_GTK_2_X        "Use GTK version 2"                           OFF  IF (UNIX AND NOT APPLE AND NOT ANDROID) )
 OCV_OPTION(WITH_IPP            "Include Intel IPP support"                   (NOT MINGW AND NOT CV_DISABLE_OPTIMIZATION)  IF (X86_64 OR X86) AND NOT WINRT AND NOT IOS )
 OCV_OPTION(WITH_HALIDE         "Include Halide support"                      OFF)
+OCV_OPTION(WITH_VULKAN         "Include Vulkan support"                      OFF)
 OCV_OPTION(WITH_INF_ENGINE     "Include Intel Inference Engine support"      OFF)
 OCV_OPTION(WITH_JASPER         "Include JPEG2K support"                      ON   IF (NOT IOS) )
 OCV_OPTION(WITH_JPEG           "Include JPEG support"                        ON)
@@ -249,14 +252,11 @@ OCV_OPTION(WITH_GIGEAPI        "Include Smartek GigE support"                OFF
 OCV_OPTION(WITH_ARAVIS         "Include Aravis GigE support"                 OFF   IF (NOT ANDROID AND NOT IOS AND NOT WINRT AND NOT WIN32) )
 OCV_OPTION(WITH_QT             "Build with Qt Backend support"               OFF  IF (NOT ANDROID AND NOT IOS AND NOT WINRT) )
 OCV_OPTION(WITH_WIN32UI        "Build with Win32 UI Backend support"         ON   IF WIN32 AND NOT WINRT)
-OCV_OPTION(WITH_QUICKTIME      "Use QuickTime for Video I/O"                 OFF  IF APPLE )
-OCV_OPTION(WITH_QTKIT          "Use QTKit Video I/O backend"                 OFF  IF APPLE )
 OCV_OPTION(WITH_TBB            "Include Intel TBB support"                   OFF  IF (NOT IOS AND NOT WINRT) )
 OCV_OPTION(WITH_HPX            "Include Ste||ar Group HPX support"           OFF)
 OCV_OPTION(WITH_OPENMP         "Include OpenMP support"                      OFF)
 OCV_OPTION(WITH_PTHREADS_PF    "Use pthreads-based parallel_for"             ON   IF (NOT WIN32 OR MINGW) )
 OCV_OPTION(WITH_TIFF           "Include TIFF support"                        ON   IF (NOT IOS) )
-OCV_OPTION(WITH_UNICAP         "Include Unicap support (GPL)"                OFF  IF (UNIX AND NOT APPLE AND NOT ANDROID) )
 OCV_OPTION(WITH_V4L            "Include Video 4 Linux support"               ON   IF (UNIX AND NOT ANDROID AND NOT APPLE) )
 OCV_OPTION(WITH_LIBV4L         "Use libv4l for Video 4 Linux support"        OFF  IF (UNIX AND NOT ANDROID AND NOT APPLE) )
 OCV_OPTION(WITH_DSHOW          "Build VideoIO with DirectShow support"       ON   IF (WIN32 AND NOT ARM AND NOT WINRT) )
@@ -283,6 +283,7 @@ OCV_OPTION(WITH_IMGCODEC_HDR   "Include HDR support"                         ON)
 OCV_OPTION(WITH_IMGCODEC_SUNRASTER "Include SUNRASTER support"               ON)
 OCV_OPTION(WITH_IMGCODEC_PXM   "Include PNM (PBM,PGM,PPM) and PAM formats support" ON)
 OCV_OPTION(WITH_IMGCODEC_PFM   "Include PFM formats support"                 ON)
+OCV_OPTION(WITH_QUIRC          "Include library QR-code decoding"            ON)
 
 # OpenCV build components
 # ===================================================
@@ -324,8 +325,10 @@ OCV_OPTION(ENABLE_OMIT_FRAME_POINTER  "Enable -fomit-frame-pointer for GCC"     
 OCV_OPTION(ENABLE_POWERPC             "Enable PowerPC for GCC"                                   ON   IF (CV_GCC AND CMAKE_SYSTEM_PROCESSOR MATCHES powerpc.*) )
 OCV_OPTION(ENABLE_VSX                 "Enable POWER8 and above VSX (64-bit little-endian)"       ON   IF ((CV_GCC OR CV_CLANG) AND PPC64LE) )
 OCV_OPTION(ENABLE_FAST_MATH           "Enable -ffast-math (not recommended for GCC 4.6.x)"       OFF  IF (CV_GCC AND (X86 OR X86_64)) )
+if(NOT IOS)  # Use CPU_BASELINE instead
 OCV_OPTION(ENABLE_NEON                "Enable NEON instructions"                                 (NEON OR ANDROID_ARM_NEON OR AARCH64) IF (CV_GCC OR CV_CLANG) AND (ARM OR AARCH64 OR IOS) )
 OCV_OPTION(ENABLE_VFPV3               "Enable VFPv3-D32 instructions"                            OFF  IF (CV_GCC OR CV_CLANG) AND (ARM OR AARCH64 OR IOS) )
+endif()
 OCV_OPTION(ENABLE_NOISY_WARNINGS      "Show all warnings even if they are too noisy"             OFF )
 OCV_OPTION(OPENCV_WARNINGS_ARE_ERRORS "Treat warnings as errors"                                 OFF )
 OCV_OPTION(ANDROID_EXAMPLES_WITH_LIBS "Build binaries of Android examples with native libraries" OFF  IF ANDROID )
@@ -339,6 +342,7 @@ OCV_OPTION(GENERATE_ABI_DESCRIPTOR    "Generate XML file for abi_compliance_chec
 OCV_OPTION(CV_ENABLE_INTRINSICS       "Use intrinsic-based optimized code" ON )
 OCV_OPTION(CV_DISABLE_OPTIMIZATION    "Disable explicit optimized code (dispatched code/intrinsics/loop unrolling/etc)" OFF )
 OCV_OPTION(CV_TRACE                   "Enable OpenCV code trace" ON)
+OCV_OPTION(OPENCV_GENERATE_SETUPVARS  "Generate setup_vars* scripts" ON IF (NOT ANDROID AND NOT APPLE_FRAMEWORK) )
 
 OCV_OPTION(ENABLE_PYLINT              "Add target with Pylint checks"                            (BUILD_DOCS OR BUILD_EXAMPLES) IF (NOT CMAKE_CROSSCOMPILING AND NOT APPLE_FRAMEWORK) )
 OCV_OPTION(ENABLE_FLAKE8              "Add target with Python flake8 checker"                    (BUILD_DOCS OR BUILD_EXAMPLES) IF (NOT CMAKE_CROSSCOMPILING AND NOT APPLE_FRAMEWORK) )
@@ -623,6 +627,8 @@ if(ANDROID AND WITH_CPUFEATURES)
   set(HAVE_CPUFEATURES 1)
 endif()
 
+include(cmake/OpenCVFindFrameworks.cmake)
+
 include(cmake/OpenCVFindLibsGrfmt.cmake)
 include(cmake/OpenCVFindLibsGUI.cmake)
 include(cmake/OpenCVFindLibsVideo.cmake)
@@ -678,6 +684,11 @@ if(WITH_HALIDE)
   include(cmake/OpenCVDetectHalide.cmake)
 endif()
 
+# --- VkCom ---
+if(WITH_VULKAN)
+  include(cmake/OpenCVDetectVulkan.cmake)
+endif()
+
 # --- Inference Engine ---
 if(WITH_INF_ENGINE)
   include(cmake/OpenCVDetectInferenceEngine.cmake)
@@ -696,6 +707,10 @@ if(WITH_OPENVX)
   include(cmake/FindOpenVX.cmake)
 endif()
 
+if(WITH_QUIRC)
+  add_subdirectory(3rdparty/quirc)
+  set(HAVE_QUIRC TRUE)
+endif()
 # ----------------------------------------------------------------------------
 # OpenCV HAL
 # ----------------------------------------------------------------------------
@@ -908,6 +923,10 @@ if(COMMAND ocv_pylint_finalize)
   ocv_pylint_add_directory(${CMAKE_CURRENT_LIST_DIR}/samples/dnn)
   ocv_pylint_add_directory_recurse(${CMAKE_CURRENT_LIST_DIR}/samples/python/tutorial_code)
   ocv_pylint_finalize()
+endif()
+
+if(OPENCV_GENERATE_SETUPVARS)
+  include(cmake/OpenCVGenSetupVars.cmake)
 endif()
 
 # ----------------------------------------------------------------------------
@@ -1133,12 +1152,8 @@ if(WITH_WIN32UI)
   status("    Win32 UI:" HAVE_WIN32UI THEN YES ELSE NO)
 endif()
 
-if(APPLE)
-  if(WITH_CARBON)
-    status("    Carbon:" YES)
-  else()
-    status("    Cocoa:"  YES)
-  endif()
+if(HAVE_COCOA)  # APPLE
+  status("    Cocoa:"  YES)
 endif()
 
 if(WITH_GTK OR HAVE_GTK)
@@ -1226,15 +1241,9 @@ endif()
 status("")
 status("  Video I/O:")
 
-if(WITH_VFW OR HAVE_VFW)
-  status("    Video for Windows:" HAVE_VFW         THEN YES                                        ELSE NO)
-endif()
-
-if(WITH_1394 OR HAVE_DC1394)
+if(WITH_1394 OR HAVE_DC1394_2)
   if (HAVE_DC1394_2)
     status("    DC1394:" "YES (ver ${ALIASOF_libdc1394-2_VERSION})")
-  elseif (HAVE_DC1394)
-    status("    DC1394:" "YES (ver ${ALIASOF_libdc1394_VERSION})")
   else()
     status("    DC1394:" "NO")
   endif()
@@ -1292,14 +1301,6 @@ if(APPLE)
   if(WITH_QUICKTIME OR HAVE_QUICKTIME)
     status("    QuickTime:"      HAVE_QUICKTIME      THEN YES                                        ELSE NO)
   endif()
-  if(WITH_QTKIT OR HAVE_QTKIT)
-    status("    QTKit:"          HAVE_QTKIT          THEN "YES (deprecated)"                         ELSE NO)
-  endif()
-endif()
-
-if(WITH_UNICAP OR HAVE_UNICAP)
-  status("    UniCap:"         HAVE_UNICAP         THEN "YES (ver ${ALIASOF_libunicap_VERSION})"   ELSE NO)
-  status("    UniCap ucil:"    HAVE_UNICAP_UCIL    THEN "YES (ver ${ALIASOF_libucil_VERSION})"     ELSE NO)
 endif()
 
 if(WITH_V4L OR WITH_LIBV4L OR HAVE_LIBV4L OR HAVE_CAMV4L OR HAVE_CAMV4L2 OR HAVE_VIDEOIO)
@@ -1442,6 +1443,15 @@ if(WITH_CUDA OR HAVE_CUDA)
   if(HAVE_CUDA)
     status("    NVIDIA GPU arch:"      ${OPENCV_CUDA_ARCH_BIN})
     status("    NVIDIA PTX archs:"     ${OPENCV_CUDA_ARCH_PTX})
+  endif()
+endif()
+
+if(WITH_VULKAN OR HAVE_VULKAN)
+  status("")
+  status("  Vulkan:"     HAVE_VULKAN THEN "YES" ELSE "NO")
+  if(HAVE_VULKAN)
+    status("    Include path:"  VULKAN_INCLUDE_DIRS THEN "${VULKAN_INCLUDE_DIRS}" ELSE "NO")
+    status("    Link libraries:" VULKAN_LIBRARIES THEN "${VULKAN_LIBRARIES}" ELSE "Dynamic load")
   endif()
 endif()
 

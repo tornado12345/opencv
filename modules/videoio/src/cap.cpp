@@ -41,6 +41,7 @@
 
 #include "precomp.hpp"
 
+#include "opencv2/videoio/registry.hpp"
 #include "videoio_registry.hpp"
 
 namespace cv {
@@ -58,16 +59,10 @@ VideoCapture::VideoCapture(const String& filename, int apiPreference)
     open(filename, apiPreference);
 }
 
-VideoCapture::VideoCapture(const String& filename)
+VideoCapture::VideoCapture(int index, int apiPreference)
 {
     CV_TRACE_FUNCTION();
-    open(filename, CAP_ANY);
-}
-
-VideoCapture::VideoCapture(int index)
-{
-    CV_TRACE_FUNCTION();
-    open(index);
+    open(index, apiPreference);
 }
 
 VideoCapture::~VideoCapture()
@@ -109,18 +104,22 @@ bool VideoCapture::open(const String& filename, int apiPreference)
     return false;
 }
 
-bool VideoCapture::open(const String& filename)
-{
-    CV_TRACE_FUNCTION();
-
-    return open(filename, CAP_ANY);
-}
-
 bool  VideoCapture::open(int cameraNum, int apiPreference)
 {
     CV_TRACE_FUNCTION();
 
     if (isOpened()) release();
+
+    if(apiPreference==CAP_ANY)
+    {
+        // interpret preferred interface (0 = autodetect)
+        int backendID = (cameraNum / 100) * 100;
+        if (backendID)
+        {
+            cameraNum %= 100;
+            apiPreference = backendID;
+        }
+    }
 
     const std::vector<VideoBackendInfo> backends = cv::videoio_registry::getAvailableBackends_CaptureByIndex();
     for (size_t i = 0; i < backends.size(); i++)
@@ -147,25 +146,22 @@ bool  VideoCapture::open(int cameraNum, int apiPreference)
     return false;
 }
 
-bool VideoCapture::open(int index)
-{
-    CV_TRACE_FUNCTION();
-
-    // interpret preferred interface (0 = autodetect)
-    int backendID = (index / 100) * 100;
-    if (backendID)
-    {
-        index %= 100;
-    }
-
-    return open(index, backendID);
-}
-
 bool VideoCapture::isOpened() const
 {
     if (!icap.empty())
         return icap->isOpened();
     return !cap.empty();  // legacy interface doesn't support closed files
+}
+
+String VideoCapture::getBackendName() const
+{
+    int api = 0;
+    if (icap)
+        api = icap->isOpened() ? icap->getCaptureDomain() : 0;
+    else if (cap)
+        api = cap->getCaptureDomain();
+    CV_Assert(api != 0);
+    return cv::videoio_registry::getBackendName((VideoCaptureAPIs)api);
 }
 
 void VideoCapture::release()
@@ -256,6 +252,8 @@ VideoCapture& VideoCapture::operator >> (UMat& image)
 
 bool VideoCapture::set(int propId, double value)
 {
+    CV_CheckNE(propId, (int)CAP_PROP_BACKEND, "Can't set read-only property");
+
     if (!icap.empty())
         return icap->setProperty(propId, value);
     return cvSetCaptureProperty(cap, propId, value) != 0;
@@ -263,6 +261,17 @@ bool VideoCapture::set(int propId, double value)
 
 double VideoCapture::get(int propId) const
 {
+    if (propId == CAP_PROP_BACKEND)
+    {
+        int api = 0;
+        if (icap)
+            api = icap->isOpened() ? icap->getCaptureDomain() : 0;
+        else if (cap)
+            api = cap->getCaptureDomain();
+        if (api <= 0)
+            return -1.0;
+        return (double)api;
+    }
     if (!icap.empty())
         return icap->getProperty(propId);
     return cap ? cap->getProperty(propId) : 0;
@@ -342,6 +351,8 @@ bool VideoWriter::isOpened() const
 
 bool VideoWriter::set(int propId, double value)
 {
+    CV_CheckNE(propId, (int)CAP_PROP_BACKEND, "Can't set read-only property");
+
     if (!iwriter.empty())
         return iwriter->setProperty(propId, value);
     return false;
@@ -349,12 +360,34 @@ bool VideoWriter::set(int propId, double value)
 
 double VideoWriter::get(int propId) const
 {
+    if (propId == CAP_PROP_BACKEND)
+    {
+        int api = 0;
+        if (iwriter)
+            api = iwriter->getCaptureDomain();
+        else if (writer)
+            api = writer->getCaptureDomain();
+        if (api <= 0)
+            return -1.0;
+        return (double)api;
+    }
     if (!iwriter.empty())
         return iwriter->getProperty(propId);
     return 0.;
 }
 
-void VideoWriter::write(const Mat& image)
+String VideoWriter::getBackendName() const
+{
+    int api = 0;
+    if (iwriter)
+        api = iwriter->getCaptureDomain();
+    else if (writer)
+        api = writer->getCaptureDomain();
+    CV_Assert(api != 0);
+    return cv::videoio_registry::getBackendName((VideoCaptureAPIs)api);
+}
+
+void VideoWriter::write(InputArray image)
 {
     CV_INSTRUMENT_REGION();
 
@@ -362,7 +395,7 @@ void VideoWriter::write(const Mat& image)
         iwriter->write(image);
     else
     {
-        IplImage _img = cvIplImage(image);
+        IplImage _img = cvIplImage(image.getMat());
         cvWriteFrame(writer, &_img);
     }
 }
@@ -371,6 +404,13 @@ VideoWriter& VideoWriter::operator << (const Mat& image)
 {
     CV_INSTRUMENT_REGION();
 
+    write(image);
+    return *this;
+}
+
+VideoWriter& VideoWriter::operator << (const UMat& image)
+{
+    CV_INSTRUMENT_REGION();
     write(image);
     return *this;
 }

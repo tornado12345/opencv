@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "opencv2/gapi/fluid/gfluidbuffer.hpp"
-#include "opencv2/gapi/own/convert.hpp" // cv::gapi::own::to_ocv
+#include "opencv2/gapi/own/exports.hpp" // GAPI_EXPORTS
 
 namespace cv {
 namespace gapi {
@@ -30,13 +30,13 @@ public:
     virtual const uint8_t* inLineB(int log_idx, const BufferStorageWithBorder &data, int desc_height) const = 0;
 
     // Fills border pixels after buffer allocation (if possible (for const border))
-    virtual void fillCompileTimeBorder(BufferStorageWithBorder &) const { /* nothing */ }
+    inline virtual void fillCompileTimeBorder(BufferStorageWithBorder &) { /* nothing */ }
 
     // Fills required border lines
-    virtual void updateBorderPixels(BufferStorageWithBorder& /*data*/, int /*startLine*/, int /*lpi*/) const { /* nothing */ }
+    inline virtual void updateBorderPixels(BufferStorageWithBorder& /*data*/, int /*startLine*/, int /*lpi*/) const { /* nothing */ }
 
     inline int borderSize() const { return m_border_size; }
-    virtual std::size_t size() const { return 0; }
+    inline virtual std::size_t size() const { return 0; }
 };
 
 template<int BorderType>
@@ -53,19 +53,19 @@ template<>
 class BorderHandlerT<cv::BORDER_CONSTANT> : public BorderHandler
 {
     cv::gapi::own::Scalar m_border_value;
-    cv::Mat m_const_border;
+    cv::gapi::own::Mat m_const_border;
 
 public:
-    BorderHandlerT(int border_size, cv::gapi::own::Scalar border_value, int data_type, int desc_width);
+    BorderHandlerT(int border_size, cv::gapi::own::Scalar border_value);
     virtual const uint8_t* inLineB(int log_idx, const BufferStorageWithBorder &data, int desc_height) const override;
-    virtual void fillCompileTimeBorder(BufferStorageWithBorder &) const override;
+    virtual void fillCompileTimeBorder(BufferStorageWithBorder &) override;
     virtual std::size_t size() const override;
 };
 
 class BufferStorage
 {
 protected:
-    cv::Mat m_data;
+    cv::gapi::own::Mat m_data;
 
 public:
     virtual void copyTo(BufferStorageWithBorder &dst, int startLine, int nLines) const = 0;
@@ -77,8 +77,8 @@ public:
 
     inline bool empty() const { return m_data.empty(); }
 
-    inline const cv::Mat& data() const { return m_data; }
-    inline       cv::Mat& data()       { return m_data; }
+    inline const cv::gapi::own::Mat& data() const { return m_data; }
+    inline       cv::gapi::own::Mat& data()       { return m_data; }
 
     inline int rows() const { return m_data.rows; }
     inline int cols() const { return m_data.cols; }
@@ -114,9 +114,9 @@ public:
         return m_data.ptr(physIdx(idx), 0);
     }
 
-    inline void attach(const cv::Mat& _data, const cv::gapi::own::Rect& _roi)
+    inline void attach(const cv::gapi::own::Mat& _data, cv::gapi::own::Rect _roi)
     {
-        m_data = _data(cv::gapi::own::to_ocv(_roi));
+        m_data = _data(_roi);
         m_roi = _roi;
         m_is_virtual = false;
     }
@@ -151,7 +151,8 @@ public:
         return m_data.ptr(physIdx(idx), borderSize());
     }
 
-    void create(int capacity, int desc_width, int type, int border_size, Border border);
+    void init(int depth, int border_size, Border border);
+    void create(int capacity, int desc_width, int dtype);
 
     virtual const uint8_t* inLineB(int log_idx, int desc_height) const override;
 
@@ -178,6 +179,7 @@ public:
     virtual ~Priv() = default;
     // API used by actors/backend
 
+    virtual void allocate(int lineConsumption, BorderOpt border) = 0;
     virtual void prepareToRead() = 0;
 
     void readDone(int linesRead, int linesForNextIteration);
@@ -198,9 +200,10 @@ public:
     // API used by actors/backend
     ViewPrivWithoutOwnBorder(const Buffer *p, int borderSize);
 
-    virtual void prepareToRead() override { /* nothing */ }
+    inline virtual void allocate(int, BorderOpt) override { /* nothing */ }
+    inline virtual void prepareToRead() override { /* nothing */ }
 
-    virtual std::size_t size() const override { return 0; }
+    inline virtual std::size_t size() const override { return 0; }
 
     // API used (indirectly) by user code
     virtual const uint8_t* InLineB(int index) const override;
@@ -212,8 +215,9 @@ class ViewPrivWithOwnBorder final : public View::Priv
 
 public:
     // API used by actors/backend
-    ViewPrivWithOwnBorder(const Buffer *p, int lineCapacity, int borderSize, Border border);
+    ViewPrivWithOwnBorder(const Buffer *p, int borderSize);
 
+    inline virtual void allocate(int lineConsumption, BorderOpt border) override;
     virtual void prepareToRead() override;
     virtual std::size_t size() const override;
 
@@ -227,9 +231,6 @@ void debugBufferPriv(const Buffer& buffer, std::ostream &os);
 // like readDone/writeDone in low-level tests
 class GAPI_EXPORTS Buffer::Priv
 {
-    int m_line_consumption = -1;
-    int m_border_size      = -1;
-    int m_skew             = -1;
     int m_writer_lpi       =  1;
 
     cv::GMatDesc m_desc    = cv::GMatDesc{-1,-1,{-1,-1}};
@@ -256,19 +257,16 @@ public:
 
     // API used by actors/backend
     void init(const cv::GMatDesc &desc,
-              int line_consumption,
-              int border_size,
-              int skew,
-              int wlpi,
+              int writer_lpi,
               int readStart,
               cv::gapi::own::Rect roi);
 
-    void allocate(BorderOpt border);
-    void bindTo(const cv::Mat &data, bool is_input);
+    void allocate(BorderOpt border, int border_size, int line_consumption, int skew);
+    void bindTo(const cv::gapi::own::Mat &data, bool is_input);
 
-    void addView(const View& view) { m_views.push_back(view); }
+    inline void addView(const View& view) { m_views.push_back(view); }
 
-    const GMatDesc meta() const { return m_desc; }
+    inline const GMatDesc& meta() const { return m_desc; }
 
     bool full() const;
     void writeDone();

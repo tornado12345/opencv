@@ -45,6 +45,7 @@
 #include "opencv2/core/hal/intrin.hpp"
 #include "../op_halide.hpp"
 #include "../op_inf_engine.hpp"
+#include "../op_vkcom.hpp"
 #include <float.h>
 #include <algorithm>
 using std::max;
@@ -155,7 +156,9 @@ public:
         else
             return backendId == DNN_BACKEND_OPENCV ||
                    backendId == DNN_BACKEND_HALIDE && haveHalide() &&
-                   (type == MAX || type == AVE && !pad_t && !pad_l && !pad_b && !pad_r);
+                   (type == MAX || type == AVE && !pad_t && !pad_l && !pad_b && !pad_r) ||
+                   backendId == DNN_BACKEND_VKCOM && haveVulkan() &&
+                   (type == MAX || type == AVE);
     }
 
 #ifdef HAVE_OPENCL
@@ -246,6 +249,41 @@ public:
         }
     }
 
+    virtual Ptr<BackendNode> initVkCom(const std::vector<Ptr<BackendWrapper> > &inputs) CV_OVERRIDE
+    {
+#ifdef HAVE_VULKAN
+        int padding_mode;
+        vkcom::PoolType pool_type;
+        int filter_size[2] = {kernel.height, kernel.width};
+        int pad_size[2] = {pad.height, pad.width};
+        int stride_size[2] = {stride.height, stride.width};
+        pool_type = type == MAX ? vkcom::kPoolTypeMax:
+                   (type == AVE ? vkcom::kPoolTypeAvg:
+                            vkcom::kPoolTypeNum);
+
+        if (padMode.empty())
+        {
+            padding_mode = vkcom::kPaddingModeCaffe;
+        }
+        else if (padMode == "VALID")
+        {
+            padding_mode = vkcom::kPaddingModeValid;
+        }
+        else if (padMode == "SAME")
+        {
+            padding_mode = vkcom::kPaddingModeSame;
+        }
+        else
+            CV_Error(Error::StsError, "Unsupported padding mode " + padMode);
+
+        std::shared_ptr<vkcom::OpBase> op(new vkcom::OpPool(filter_size, pad_size,
+                                                            stride_size, padding_mode,
+                                                            pool_type, avePoolPaddedArea));
+        return Ptr<BackendNode>(new VkComBackendNode(inputs, op));
+#endif
+        return Ptr<BackendNode>();
+    }
+
     virtual Ptr<BackendNode> initHalide(const std::vector<Ptr<BackendWrapper> > &inputs) CV_OVERRIDE
     {
         if (type == MAX)
@@ -268,6 +306,16 @@ public:
         {
             lp.type = "Pooling";
             InferenceEngine::PoolingLayer* poolLayer = new InferenceEngine::PoolingLayer(lp);
+#if INF_ENGINE_VER_MAJOR_GT(INF_ENGINE_RELEASE_2018R3)
+            poolLayer->_kernel.insert(InferenceEngine::X_AXIS, kernel.width);
+            poolLayer->_kernel.insert(InferenceEngine::Y_AXIS, kernel.height);
+            poolLayer->_stride.insert(InferenceEngine::X_AXIS, stride.width);
+            poolLayer->_stride.insert(InferenceEngine::Y_AXIS, stride.height);
+            poolLayer->_padding.insert(InferenceEngine::X_AXIS, pad_l);
+            poolLayer->_padding.insert(InferenceEngine::Y_AXIS, pad_t);
+            poolLayer->_pads_end.insert(InferenceEngine::X_AXIS, pad_r);
+            poolLayer->_pads_end.insert(InferenceEngine::Y_AXIS, pad_b);
+#else
             poolLayer->_kernel_x = kernel.width;
             poolLayer->_kernel_y = kernel.height;
             poolLayer->_stride_x = stride.width;
@@ -276,6 +324,7 @@ public:
             poolLayer->_padding_y = pad_t;
             poolLayer->params["pad-r"] = format("%d", pad_r);
             poolLayer->params["pad-b"] = format("%d", pad_b);
+#endif
             poolLayer->_exclude_pad = type == AVE && padMode == "SAME";
             poolLayer->params["rounding-type"] = ceilMode ? "ceil" : "floor";
             poolLayer->_type = type == MAX ? InferenceEngine::PoolingLayer::PoolType::MAX :
@@ -321,7 +370,8 @@ public:
         int poolingType;
         float spatialScale;
 
-        PoolingInvoker() : src(0), rois(0), dst(0), mask(0), avePoolPaddedArea(false), nstripes(0),
+        PoolingInvoker() : src(0), rois(0), dst(0), mask(0), pad_l(0), pad_t(0), pad_r(0), pad_b(0),
+                           avePoolPaddedArea(false), nstripes(0),
                            computeMaxIdx(0), poolingType(MAX), spatialScale(0) {}
 
         static void run(const Mat& src, const Mat& rois, Mat& dst, Mat& mask, Size kernel,

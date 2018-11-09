@@ -4,6 +4,9 @@
 //
 // Copyright (C) 2018 Intel Corporation
 
+#if !defined(GAPI_STANDALONE)
+
+#include "precomp.hpp"
 
 #include "opencv2/gapi/own/assert.hpp"
 #include "opencv2/core/traits.hpp"
@@ -814,6 +817,7 @@ GAPI_FLUID_KERNEL(GFluidSobel, cv::gapi::imgproc::GSobel, true)
         UNARY_( float, uchar , run_sobel, dst, src, kx, ky, ksize, scale, delta);
         UNARY_( float, ushort, run_sobel, dst, src, kx, ky, ksize, scale, delta);
         UNARY_( float,  short, run_sobel, dst, src, kx, ky, ksize, scale, delta);
+        UNARY_( float,  float, run_sobel, dst, src, kx, ky, ksize, scale, delta);
 
         CV_Error(cv::Error::StsBadArg, "unsupported combination of types");
     }
@@ -1323,3 +1327,5 @@ cv::gapi::GKernelPackage cv::gapi::imgproc::fluid::kernels()
     #endif
     >();
 }
+
+#endif // !defined(GAPI_STANDALONE)

@@ -139,8 +139,14 @@ using namespace CV_CPU_OPTIMIZATION_HAL_NAMESPACE;
 #   undef CV_FP16
 #endif
 
+#if CV_SSE2 || CV_NEON || CV_VSX
+#define CV__SIMD_FORWARD 128
+#include "opencv2/core/hal/intrin_forward.hpp"
+#endif
+
 #if CV_SSE2
 
+#include "opencv2/core/hal/intrin_sse_em.hpp"
 #include "opencv2/core/hal/intrin_sse.hpp"
 
 #elif CV_NEON
@@ -168,6 +174,8 @@ using namespace CV_CPU_OPTIMIZATION_HAL_NAMESPACE;
 // (and will be mapped to v256_ counterparts) (e.g. vx_load() => v256_load())
 #if CV_AVX2
 
+#define CV__SIMD_FORWARD 256
+#include "opencv2/core/hal/intrin_forward.hpp"
 #include "opencv2/core/hal/intrin_avx.hpp"
 
 #endif
@@ -368,6 +376,9 @@ inline unsigned int trailingZeros32(unsigned int value) {
     unsigned long index = 0;
     _BitScanForward(&index, value);
     return (unsigned int)index;
+#elif defined(__clang__)
+    // clang-cl doesn't export _tzcnt_u32 for non BMI systems
+    return value ? __builtin_ctz(value) : 32;
 #else
     return _tzcnt_u32(value);
 #endif
