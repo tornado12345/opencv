@@ -75,6 +75,7 @@
         @defgroup core_utils_sse SSE utilities
         @defgroup core_utils_neon NEON utilities
         @defgroup core_utils_softfloat Softfloat support
+        @defgroup core_utils_samples Utility functions for OpenCV samples
     @}
     @defgroup core_opengl OpenGL interoperability
     @defgroup core_ipp Intel IPP Asynchronous C/C++ Converters
@@ -91,6 +92,7 @@
         @{
             @defgroup core_hal_intrin_impl Private implementation helpers
         @}
+        @defgroup core_lowlevel_api Low-level API for external libraries / plugins
     @}
 @}
  */

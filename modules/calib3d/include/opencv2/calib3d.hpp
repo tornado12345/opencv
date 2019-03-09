@@ -255,7 +255,8 @@ enum { CALIB_CB_SYMMETRIC_GRID  = 1,
        CALIB_CB_CLUSTERING      = 4
      };
 
-enum { CALIB_USE_INTRINSIC_GUESS = 0x00001,
+enum { CALIB_NINTRINSIC          = 18,
+       CALIB_USE_INTRINSIC_GUESS = 0x00001,
        CALIB_FIX_ASPECT_RATIO    = 0x00002,
        CALIB_FIX_PRINCIPAL_POINT = 0x00004,
        CALIB_ZERO_TANGENT_DIST   = 0x00008,
@@ -279,7 +280,7 @@ enum { CALIB_USE_INTRINSIC_GUESS = 0x00001,
        // for stereo rectification
        CALIB_ZERO_DISPARITY      = 0x00400,
        CALIB_USE_LU              = (1 << 17), //!< use LU instead of SVD decomposition for solving. much faster but potentially less precise
-       CALIB_USE_EXTRINSIC_GUESS = (1 << 22), //!< for stereoCalibrate
+       CALIB_USE_EXTRINSIC_GUESS = (1 << 22)  //!< for stereoCalibrate
      };
 
 //! the algorithm for finding fundamental matrix
@@ -289,6 +290,14 @@ enum { FM_7POINT = 1, //!< 7-point algorithm
        FM_RANSAC = 8  //!< RANSAC algorithm. It needs at least 15 points. 7-point algorithm is used.
      };
 
+enum HandEyeCalibrationMethod
+{
+    CALIB_HAND_EYE_TSAI         = 0, //!< A New Technique for Fully Autonomous and Efficient 3D Robotics Hand/Eye Calibration @cite Tsai89
+    CALIB_HAND_EYE_PARK         = 1, //!< Robot Sensor Calibration: Solving AX = XB on the Euclidean Group @cite Park94
+    CALIB_HAND_EYE_HORAUD       = 2, //!< Hand-eye Calibration @cite Horaud95
+    CALIB_HAND_EYE_ANDREFF      = 3, //!< On-line Hand-Eye Calibration @cite Andreff99
+    CALIB_HAND_EYE_DANIILIDIS   = 4  //!< Hand-Eye Calibration Using Dual Quaternions @cite Daniilidis98
+};
 
 
 /** @brief Converts a rotation matrix to a rotation vector or vice versa.
@@ -315,6 +324,68 @@ An example program about pose estimation from coplanar points
 
 Check @ref tutorial_homography "the corresponding tutorial" for more details
 */
+
+/** Levenberg-Marquardt solver. Starting with the specified vector of parameters it
+    optimizes the target vector criteria "err"
+    (finds local minima of each target vector component absolute value).
+
+    When needed, it calls user-provided callback.
+*/
+class CV_EXPORTS LMSolver : public Algorithm
+{
+public:
+    class CV_EXPORTS Callback
+    {
+    public:
+        virtual ~Callback() {}
+        /**
+         computes error and Jacobian for the specified vector of parameters
+
+         @param param the current vector of parameters
+         @param err output vector of errors: err_i = actual_f_i - ideal_f_i
+         @param J output Jacobian: J_ij = d(err_i)/d(param_j)
+
+         when J=noArray(), it means that it does not need to be computed.
+         Dimensionality of error vector and param vector can be different.
+         The callback should explicitly allocate (with "create" method) each output array
+         (unless it's noArray()).
+        */
+        virtual bool compute(InputArray param, OutputArray err, OutputArray J) const = 0;
+    };
+
+    /**
+       Runs Levenberg-Marquardt algorithm using the passed vector of parameters as the start point.
+       The final vector of parameters (whether the algorithm converged or not) is stored at the same
+       vector. The method returns the number of iterations used. If it's equal to the previously specified
+       maxIters, there is a big chance the algorithm did not converge.
+
+       @param param initial/final vector of parameters.
+
+       Note that the dimensionality of parameter space is defined by the size of param vector,
+       and the dimensionality of optimized criteria is defined by the size of err vector
+       computed by the callback.
+    */
+    virtual int run(InputOutputArray param) const = 0;
+
+    /**
+       Sets the maximum number of iterations
+       @param maxIters the number of iterations
+    */
+    virtual void setMaxIters(int maxIters) = 0;
+    /**
+       Retrieves the current maximum number of iterations
+    */
+    virtual int getMaxIters() const = 0;
+
+    /**
+       Creates Levenberg-Marquard solver
+
+       @param cb callback
+       @param maxIters maximum number of iterations that can be further
+         modified using setMaxIters() method.
+    */
+    static Ptr<LMSolver> create(const Ptr<LMSolver::Callback>& cb, int maxIters);
+};
 
 /** @brief Finds a perspective transformation between two planes.
 
@@ -1505,6 +1576,139 @@ CV_EXPORTS_W Mat getOptimalNewCameraMatrix( InputArray cameraMatrix, InputArray 
                                             Size imageSize, double alpha, Size newImgSize = Size(),
                                             CV_OUT Rect* validPixROI = 0,
                                             bool centerPrincipalPoint = false);
+
+/** @brief Computes Hand-Eye calibration: \f$_{}^{g}\textrm{T}_c\f$
+
+@param[in] R_gripper2base Rotation part extracted from the homogeneous matrix that transforms a point
+expressed in the gripper frame to the robot base frame (\f$_{}^{b}\textrm{T}_g\f$).
+This is a vector (`vector<Mat>`) that contains the rotation matrices for all the transformations
+from gripper frame to robot base frame.
+@param[in] t_gripper2base Translation part extracted from the homogeneous matrix that transforms a point
+expressed in the gripper frame to the robot base frame (\f$_{}^{b}\textrm{T}_g\f$).
+This is a vector (`vector<Mat>`) that contains the translation vectors for all the transformations
+from gripper frame to robot base frame.
+@param[in] R_target2cam Rotation part extracted from the homogeneous matrix that transforms a point
+expressed in the target frame to the camera frame (\f$_{}^{c}\textrm{T}_t\f$).
+This is a vector (`vector<Mat>`) that contains the rotation matrices for all the transformations
+from calibration target frame to camera frame.
+@param[in] t_target2cam Rotation part extracted from the homogeneous matrix that transforms a point
+expressed in the target frame to the camera frame (\f$_{}^{c}\textrm{T}_t\f$).
+This is a vector (`vector<Mat>`) that contains the translation vectors for all the transformations
+from calibration target frame to camera frame.
+@param[out] R_cam2gripper Estimated rotation part extracted from the homogeneous matrix that transforms a point
+expressed in the camera frame to the gripper frame (\f$_{}^{g}\textrm{T}_c\f$).
+@param[out] t_cam2gripper Estimated translation part extracted from the homogeneous matrix that transforms a point
+expressed in the camera frame to the gripper frame (\f$_{}^{g}\textrm{T}_c\f$).
+@param[in] method One of the implemented Hand-Eye calibration method, see cv::HandEyeCalibrationMethod
+
+The function performs the Hand-Eye calibration using various methods. One approach consists in estimating the
+rotation then the translation (separable solutions) and the following methods are implemented:
+  - R. Tsai, R. Lenz A New Technique for Fully Autonomous and Efficient 3D Robotics Hand/EyeCalibration \cite Tsai89
+  - F. Park, B. Martin Robot Sensor Calibration: Solving AX = XB on the Euclidean Group \cite Park94
+  - R. Horaud, F. Dornaika Hand-Eye Calibration \cite Horaud95
+
+Another approach consists in estimating simultaneously the rotation and the translation (simultaneous solutions),
+with the following implemented method:
+  - N. Andreff, R. Horaud, B. Espiau On-line Hand-Eye Calibration \cite Andreff99
+  - K. Daniilidis Hand-Eye Calibration Using Dual Quaternions \cite Daniilidis98
+
+The following picture describes the Hand-Eye calibration problem where the transformation between a camera ("eye")
+mounted on a robot gripper ("hand") has to be estimated.
+
+![](pics/hand-eye_figure.png)
+
+The calibration procedure is the following:
+  - a static calibration pattern is used to estimate the transformation between the target frame
+  and the camera frame
+  - the robot gripper is moved in order to acquire several poses
+  - for each pose, the homogeneous transformation between the gripper frame and the robot base frame is recorded using for
+  instance the robot kinematics
+\f[
+    \begin{bmatrix}
+    X_b\\
+    Y_b\\
+    Z_b\\
+    1
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+    _{}^{b}\textrm{R}_g & _{}^{b}\textrm{t}_g \\
+    0_{1 \times 3} & 1
+    \end{bmatrix}
+    \begin{bmatrix}
+    X_g\\
+    Y_g\\
+    Z_g\\
+    1
+    \end{bmatrix}
+\f]
+  - for each pose, the homogeneous transformation between the calibration target frame and the camera frame is recorded using
+  for instance a pose estimation method (PnP) from 2D-3D point correspondences
+\f[
+    \begin{bmatrix}
+    X_c\\
+    Y_c\\
+    Z_c\\
+    1
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+    _{}^{c}\textrm{R}_t & _{}^{c}\textrm{t}_t \\
+    0_{1 \times 3} & 1
+    \end{bmatrix}
+    \begin{bmatrix}
+    X_t\\
+    Y_t\\
+    Z_t\\
+    1
+    \end{bmatrix}
+\f]
+
+The Hand-Eye calibration procedure returns the following homogeneous transformation
+\f[
+    \begin{bmatrix}
+    X_g\\
+    Y_g\\
+    Z_g\\
+    1
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+    _{}^{g}\textrm{R}_c & _{}^{g}\textrm{t}_c \\
+    0_{1 \times 3} & 1
+    \end{bmatrix}
+    \begin{bmatrix}
+    X_c\\
+    Y_c\\
+    Z_c\\
+    1
+    \end{bmatrix}
+\f]
+
+This problem is also known as solving the \f$\mathbf{A}\mathbf{X}=\mathbf{X}\mathbf{B}\f$ equation:
+\f[
+    \begin{align*}
+    ^{b}{\textrm{T}_g}^{(1)} \hspace{0.2em} ^{g}\textrm{T}_c \hspace{0.2em} ^{c}{\textrm{T}_t}^{(1)} &=
+    \hspace{0.1em} ^{b}{\textrm{T}_g}^{(2)} \hspace{0.2em} ^{g}\textrm{T}_c \hspace{0.2em} ^{c}{\textrm{T}_t}^{(2)} \\
+
+    (^{b}{\textrm{T}_g}^{(2)})^{-1} \hspace{0.2em} ^{b}{\textrm{T}_g}^{(1)} \hspace{0.2em} ^{g}\textrm{T}_c &=
+    \hspace{0.1em} ^{g}\textrm{T}_c \hspace{0.2em} ^{c}{\textrm{T}_t}^{(2)} (^{c}{\textrm{T}_t}^{(1)})^{-1} \\
+
+    \textrm{A}_i \textrm{X} &= \textrm{X} \textrm{B}_i \\
+    \end{align*}
+\f]
+
+\note
+Additional information can be found on this [website](http://campar.in.tum.de/Chair/HandEyeCalibration).
+\note
+A minimum of 2 motions with non parallel rotation axes are necessary to determine the hand-eye transformation.
+So at least 3 different poses are required, but it is strongly recommended to use many more poses.
+
+ */
+CV_EXPORTS_W void calibrateHandEye( InputArrayOfArrays R_gripper2base, InputArrayOfArrays t_gripper2base,
+                                    InputArrayOfArrays R_target2cam, InputArrayOfArrays t_target2cam,
+                                    OutputArray R_cam2gripper, OutputArray t_cam2gripper,
+                                    HandEyeCalibrationMethod method=CALIB_HAND_EYE_TSAI );
 
 /** @brief Converts points from Euclidean to homogeneous space.
 
@@ -2778,5 +2982,45 @@ optimization. It stays at the center or at a different location specified when C
 } // end namespace fisheye
 
 } //end namespace cv
+
+#if 0 //def __cplusplus
+//////////////////////////////////////////////////////////////////////////////////////////
+class CV_EXPORTS CvLevMarq
+{
+public:
+    CvLevMarq();
+    CvLevMarq( int nparams, int nerrs, CvTermCriteria criteria=
+              cvTermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,DBL_EPSILON),
+              bool completeSymmFlag=false );
+    ~CvLevMarq();
+    void init( int nparams, int nerrs, CvTermCriteria criteria=
+              cvTermCriteria(CV_TERMCRIT_EPS+CV_TERMCRIT_ITER,30,DBL_EPSILON),
+              bool completeSymmFlag=false );
+    bool update( const CvMat*& param, CvMat*& J, CvMat*& err );
+    bool updateAlt( const CvMat*& param, CvMat*& JtJ, CvMat*& JtErr, double*& errNorm );
+
+    void clear();
+    void step();
+    enum { DONE=0, STARTED=1, CALC_J=2, CHECK_ERR=3 };
+
+    cv::Ptr<CvMat> mask;
+    cv::Ptr<CvMat> prevParam;
+    cv::Ptr<CvMat> param;
+    cv::Ptr<CvMat> J;
+    cv::Ptr<CvMat> err;
+    cv::Ptr<CvMat> JtJ;
+    cv::Ptr<CvMat> JtJN;
+    cv::Ptr<CvMat> JtErr;
+    cv::Ptr<CvMat> JtJV;
+    cv::Ptr<CvMat> JtJW;
+    double prevErrNorm, errNorm;
+    int lambdaLg10;
+    CvTermCriteria criteria;
+    int state;
+    int iters;
+    bool completeSymmFlag;
+    int solveMethod;
+};
+#endif
 
 #endif

@@ -40,6 +40,7 @@
 //M*/
 
 #include "precomp.hpp"
+#include "cap_interface.hpp"
 
 #ifdef HAVE_DC1394_2
 
@@ -183,7 +184,11 @@ CvDC1394::~CvDC1394()
     dc = 0;
 }
 
-static CvDC1394 dc1394;
+static CvDC1394& getDC1394()
+{
+    static CvDC1394 dc1394;
+    return dc1394;
+}
 
 class CvCaptureCAM_DC1394_v2_CPP : public CvCapture
 {
@@ -436,7 +441,7 @@ bool CvCaptureCAM_DC1394_v2_CPP::startCapture()
     code = dc1394_capture_setup(dcCam, nDMABufs, DC1394_CAPTURE_FLAGS_DEFAULT);
     if (code >= 0)
     {
-        FD_SET(dc1394_capture_get_fileno(dcCam), &dc1394.camFds);
+        FD_SET(dc1394_capture_get_fileno(dcCam), &getDC1394().camFds);
         dc1394_video_set_transmission(dcCam, DC1394_ON);
         started = true;
     }
@@ -452,15 +457,15 @@ bool CvCaptureCAM_DC1394_v2_CPP::open(int index)
 
     close();
 
-    if (!dc1394.dc)
+    if (!getDC1394().dc)
         goto _exit_;
 
-    err = dc1394_camera_enumerate(dc1394.dc, &cameraList);
+    err = dc1394_camera_enumerate(getDC1394().dc, &cameraList);
     if (err < 0 || !cameraList || (unsigned)index >= (unsigned)cameraList->num)
         goto _exit_;
 
     guid = cameraList->ids[index].guid;
-    dcCam = dc1394_camera_new(dc1394.dc, guid);
+    dcCam = dc1394_camera_new(getDC1394().dc, guid);
     if (!dcCam)
         goto _exit_;
 
@@ -485,8 +490,8 @@ void CvCaptureCAM_DC1394_v2_CPP::close()
         // check for fileno valid before using
         int fileno=dc1394_capture_get_fileno(dcCam);
 
-        if (fileno>=0 && FD_ISSET(fileno, &dc1394.camFds))
-            FD_CLR(fileno, &dc1394.camFds);
+        if (fileno>=0 && FD_ISSET(fileno, &getDC1394().camFds))
+            FD_CLR(fileno, &getDC1394().camFds);
         dc1394_video_set_transmission(dcCam, DC1394_OFF);
         dc1394_capture_stop(dcCam);
         dc1394_camera_free(dcCam);
@@ -793,13 +798,11 @@ bool CvCaptureCAM_DC1394_v2_CPP::setProperty(int propId, double value)
 }
 
 
-CvCapture* cvCreateCameraCapture_DC1394_2(int index)
+cv::Ptr<cv::IVideoCapture> cv::create_DC1394_capture(int index)
 {
     CvCaptureCAM_DC1394_v2_CPP* capture = new CvCaptureCAM_DC1394_v2_CPP;
-
     if (capture->open(index))
-        return capture;
-
+        return cv::makePtr<cv::LegacyCapture>(capture);
     delete capture;
     return 0;
 }

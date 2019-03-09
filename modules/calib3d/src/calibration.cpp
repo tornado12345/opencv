@@ -43,7 +43,7 @@
 #include "precomp.hpp"
 #include "opencv2/imgproc/imgproc_c.h"
 #include "distortion_model.hpp"
-#include "opencv2/calib3d/calib3d_c.h"
+#include "calib3d_c_api.h"
 #include <stdio.h>
 #include <iterator>
 
@@ -1520,10 +1520,6 @@ static double cvCalibrateCamera2Internal( const CvMat* objectPoints,
     nparams = NINTRINSIC + nimages*6;
     if( releaseObject )
         nparams += maxPoints * 3;
-    Mat _Ji( maxPoints*2, NINTRINSIC, CV_64FC1, Scalar(0));
-    Mat _Je( maxPoints*2, 6, CV_64FC1 );
-    Mat _Jo( maxPoints*2, maxPoints*3, CV_64FC1, Scalar(0) );
-    Mat _err( maxPoints*2, 1, CV_64FC1 );
 
     _k = cvMat( distCoeffs->rows, distCoeffs->cols, CV_MAKETYPE(CV_64F,CV_MAT_CN(distCoeffs->type)), k);
     if( distCoeffs->rows*distCoeffs->cols*CV_MAT_CN(distCoeffs->type) < 8 )
@@ -1586,6 +1582,13 @@ static double cvCalibrateCamera2Internal( const CvMat* objectPoints,
     }
 
     CvLevMarq solver( nparams, 0, termCrit );
+
+    Mat _Ji( maxPoints*2, NINTRINSIC, CV_64FC1, Scalar(0));
+    Mat _Je( maxPoints*2, 6, CV_64FC1 );
+    Mat _err( maxPoints*2, 1, CV_64FC1 );
+
+    const bool allocJo = (solver.state == CvLevMarq::CALC_J) || stdDevs;
+    Mat _Jo = allocJo ? Mat( maxPoints*2, maxPoints*3, CV_64FC1, Scalar(0) ) : Mat();
 
     if(flags & CALIB_USE_LU) {
         solver.solveMethod = DECOMP_LU;
@@ -1720,20 +1723,22 @@ static double cvCalibrateCamera2Internal( const CvMat* objectPoints,
 
             _Je.resize(ni*2); _Ji.resize(ni*2); _err.resize(ni*2);
             _Jo.resize(ni*2);
-            CvMat _dpdr = cvMat(_Je.colRange(0, 3));
-            CvMat _dpdt = cvMat(_Je.colRange(3, 6));
-            CvMat _dpdf = cvMat(_Ji.colRange(0, 2));
-            CvMat _dpdc = cvMat(_Ji.colRange(2, 4));
-            CvMat _dpdk = cvMat(_Ji.colRange(4, NINTRINSIC));
-            CvMat _dpdo = cvMat(_Jo.colRange(0, ni * 3));
+
             CvMat _mp = cvMat(_err.reshape(2, 1));
 
             if( calcJ )
             {
-                 cvProjectPoints2Internal( &_Mi, &_ri, &_ti, &matA, &_k, &_mp, &_dpdr, &_dpdt,
-                                  (flags & CALIB_FIX_FOCAL_LENGTH) ? 0 : &_dpdf,
-                                  (flags & CALIB_FIX_PRINCIPAL_POINT) ? 0 : &_dpdc, &_dpdk,
-                                  &_dpdo,
+                CvMat _dpdr = cvMat(_Je.colRange(0, 3));
+                CvMat _dpdt = cvMat(_Je.colRange(3, 6));
+                CvMat _dpdf = cvMat(_Ji.colRange(0, 2));
+                CvMat _dpdc = cvMat(_Ji.colRange(2, 4));
+                CvMat _dpdk = cvMat(_Ji.colRange(4, NINTRINSIC));
+                CvMat _dpdo = _Jo.empty() ? CvMat() : cvMat(_Jo.colRange(0, ni * 3));
+
+                cvProjectPoints2Internal( &_Mi, &_ri, &_ti, &matA, &_k, &_mp, &_dpdr, &_dpdt,
+                                  (flags & CALIB_FIX_FOCAL_LENGTH) ? nullptr : &_dpdf,
+                                  (flags & CALIB_FIX_PRINCIPAL_POINT) ? nullptr : &_dpdc, &_dpdk,
+                                  (_Jo.empty()) ? nullptr: &_dpdo,
                                   (flags & CALIB_FIX_ASPECT_RATIO) ? aspectRatio : 0);
             }
             else
@@ -3003,15 +3008,22 @@ void cv::reprojectImageTo3D( InputArray _disparity,
                stype == CV_32SC1 || stype == CV_32FC1 );
     CV_Assert( Q.size() == Size(4,4) );
 
+    if( dtype >= 0 )
+        dtype = CV_MAKETYPE(CV_MAT_DEPTH(dtype), 3);
+
+    if( __3dImage.fixedType() )
+    {
+        int dtype_ = __3dImage.type();
+        CV_Assert( dtype == -1 || dtype == dtype_ );
+        dtype = dtype_;
+    }
+
     if( dtype < 0 )
         dtype = CV_32FC3;
     else
-    {
-        dtype = CV_MAKETYPE(CV_MAT_DEPTH(dtype), 3);
         CV_Assert( dtype == CV_16SC3 || dtype == CV_32SC3 || dtype == CV_32FC3 );
-    }
 
-    __3dImage.create(disparity.size(), CV_MAKETYPE(dtype, 3));
+    __3dImage.create(disparity.size(), dtype);
     Mat _3dImage = __3dImage.getMat();
 
     const float bigZ = 10000.f;
@@ -3341,10 +3353,17 @@ static void collectCalibrationData( InputArrayOfArrays objectPoints,
 
     for( i = 0; i < nimages; i++ )
     {
-        ni = objectPoints.getMat(i).checkVector(3, CV_32F);
+        Mat objectPoint = objectPoints.getMat(i);
+        if (objectPoint.empty())
+            CV_Error(CV_StsBadSize, "objectPoints should not contain empty vector of vectors of points");
+        ni = objectPoint.checkVector(3, CV_32F);
         if( ni <= 0 )
             CV_Error(CV_StsUnsupportedFormat, "objectPoints should contain vector of vectors of points of type Point3f");
-        int ni1 = imagePoints1.getMat(i).checkVector(2, CV_32F);
+
+        Mat imagePoint1 = imagePoints1.getMat(i);
+        if (imagePoint1.empty())
+            CV_Error(CV_StsBadSize, "imagePoints1 should not contain empty vector of vectors of points");
+        int ni1 = imagePoint1.checkVector(2, CV_32F);
         if( ni1 <= 0 )
             CV_Error(CV_StsUnsupportedFormat, "imagePoints1 should contain vector of vectors of points of type Point2f");
         CV_Assert( ni == ni1 );
@@ -3423,11 +3442,13 @@ static void collectCalibrationData( InputArrayOfArrays objectPoints,
                             imgPtMat2, npoints );
 }
 
-static Mat prepareCameraMatrix(Mat& cameraMatrix0, int rtype)
+static Mat prepareCameraMatrix(Mat& cameraMatrix0, int rtype, int flags)
 {
     Mat cameraMatrix = Mat::eye(3, 3, rtype);
     if( cameraMatrix0.size() == cameraMatrix.size() )
         cameraMatrix0.convertTo(cameraMatrix, rtype);
+    else if( flags & CALIB_USE_INTRINSIC_GUESS )
+        CV_Error(Error::StsBadArg, "CALIB_USE_INTRINSIC_GUESS flag is set, but the camera matrix is not 3x3");
     return cameraMatrix;
 }
 
@@ -3544,6 +3565,8 @@ void cv::projectPoints( InputArray _opoints,
     CvMat dpdrot, dpdt, dpdf, dpdc, dpddist;
     CvMat *pdpdrot=0, *pdpdt=0, *pdpdf=0, *pdpdc=0, *pdpddist=0;
 
+    CV_Assert( _ipoints.needed() );
+
     _ipoints.create(npoints, 1, CV_MAKETYPE(depth, 2), -1, true);
     Mat imagePoints = _ipoints.getMat();
     CvMat c_imagePoints = cvMat(imagePoints);
@@ -3650,8 +3673,12 @@ double cv::calibrateCameraRO(InputArrayOfArrays _objectPoints,
     CV_INSTRUMENT_REGION();
 
     int rtype = CV_64F;
+
+    CV_Assert( _cameraMatrix.needed() );
+    CV_Assert( _distCoeffs.needed() );
+
     Mat cameraMatrix = _cameraMatrix.getMat();
-    cameraMatrix = prepareCameraMatrix(cameraMatrix, rtype);
+    cameraMatrix = prepareCameraMatrix(cameraMatrix, rtype, flags);
     Mat distCoeffs = _distCoeffs.getMat();
     distCoeffs = (flags & CALIB_THIN_PRISM_MODEL) && !(flags & CALIB_TILTED_MODEL)  ? prepareDistCoeffs(distCoeffs, rtype, 12) :
                                                       prepareDistCoeffs(distCoeffs, rtype);
@@ -3864,8 +3891,8 @@ double cv::stereoCalibrate( InputArrayOfArrays _objectPoints,
     Mat cameraMatrix2 = _cameraMatrix2.getMat();
     Mat distCoeffs1 = _distCoeffs1.getMat();
     Mat distCoeffs2 = _distCoeffs2.getMat();
-    cameraMatrix1 = prepareCameraMatrix(cameraMatrix1, rtype);
-    cameraMatrix2 = prepareCameraMatrix(cameraMatrix2, rtype);
+    cameraMatrix1 = prepareCameraMatrix(cameraMatrix1, rtype, flags);
+    cameraMatrix2 = prepareCameraMatrix(cameraMatrix2, rtype, flags);
     distCoeffs1 = prepareDistCoeffs(distCoeffs1, rtype);
     distCoeffs2 = prepareDistCoeffs(distCoeffs2, rtype);
 

@@ -779,6 +779,7 @@ macro(ocv_glob_module_sources)
        "${CMAKE_CURRENT_LIST_DIR}/include/opencv2/${name}/hal/*.h"
        "${CMAKE_CURRENT_LIST_DIR}/include/opencv2/${name}/utils/*.hpp"
        "${CMAKE_CURRENT_LIST_DIR}/include/opencv2/${name}/utils/*.h"
+       "${CMAKE_CURRENT_LIST_DIR}/include/opencv2/${name}/legacy/*.h"
   )
   file(GLOB lib_hdrs_detail
        "${CMAKE_CURRENT_LIST_DIR}/include/opencv2/${name}/detail/*.hpp"
@@ -909,7 +910,11 @@ macro(_ocv_create_module)
       source_group("Src" FILES "${_VS_VERSION_FILE}")
     endif()
   endif()
-  if(WIN32 AND NOT ("${the_module}" STREQUAL "opencv_core" OR "${the_module}" STREQUAL "opencv_world")
+  if(WIN32 AND NOT (
+          "${the_module}" STREQUAL "opencv_core" OR
+          "${the_module}" STREQUAL "opencv_world" OR
+          "${the_module}" STREQUAL "opencv_cudev"
+      )
       AND (BUILD_SHARED_LIBS AND NOT "x${OPENCV_MODULE_TYPE}" STREQUAL "xSTATIC")
       AND NOT OPENCV_SKIP_DLLMAIN_GENERATION
   )
@@ -1011,6 +1016,8 @@ macro(_ocv_create_module)
       string(REGEX REPLACE "^.*opencv2/" "opencv2/" hdr2 "${hdr}")
       if(NOT hdr2 MATCHES "private" AND hdr2 MATCHES "^(opencv2/?.*)/[^/]+.h(..)?$" )
         install(FILES ${hdr} OPTIONAL DESTINATION "${OPENCV_INCLUDE_INSTALL_PATH}/${CMAKE_MATCH_1}" COMPONENT dev)
+      else()
+        #message("Header file will be NOT installed: ${hdr}")
       endif()
     endforeach()
   endif()
@@ -1145,6 +1152,10 @@ function(ocv_add_perf_tests)
       ocv_target_link_libraries(${the_target} LINK_PRIVATE ${perf_deps} ${OPENCV_MODULE_${the_module}_DEPS} ${OPENCV_LINKER_LIBS} ${OPENCV_PERF_${the_module}_DEPS})
       add_dependencies(opencv_perf_tests ${the_target})
 
+      if(TARGET opencv_videoio_plugins)
+        add_dependencies(${the_target} opencv_videoio_plugins)
+      endif()
+
       if(HAVE_HPX)
         message("Linking HPX to Perf test of module ${name}")
         ocv_target_link_libraries(${the_target} LINK_PRIVATE "${HPX_LIBRARIES}")
@@ -1235,6 +1246,10 @@ function(ocv_add_accuracy_tests)
       ocv_target_link_libraries(${the_target} LINK_PRIVATE ${test_deps} ${OPENCV_MODULE_${the_module}_DEPS} ${OPENCV_LINKER_LIBS} ${OPENCV_TEST_${the_module}_DEPS})
       add_dependencies(opencv_tests ${the_target})
 
+      if(TARGET opencv_videoio_plugins)
+        add_dependencies(${the_target} opencv_videoio_plugins)
+      endif()
+
       if(HAVE_HPX)
         message("Linking HPX to Perf test of module ${name}")
         ocv_target_link_libraries(${the_target} LINK_PRIVATE "${HPX_LIBRARIES}")
@@ -1316,6 +1331,10 @@ function(ocv_add_samples)
           add_dependencies(opencv_samples ${parent_target})
         endif()
         add_dependencies(${parent_target} ${the_target})
+
+        if(TARGET opencv_videoio_plugins)
+          add_dependencies(${the_target} opencv_videoio_plugins)
+        endif()
 
         if(WIN32)
           install(TARGETS ${the_target} RUNTIME DESTINATION "samples/${module_id}" COMPONENT samples)

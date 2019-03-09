@@ -67,7 +67,7 @@ if args.classes:
         classes = f.read().rstrip('\n').split('\n')
 
 # Load a network
-net = cv.dnn.readNet(args.model, args.config, args.framework)
+net = cv.dnn.readNet(cv.samples.findFile(args.model), cv.samples.findFile(args.config), args.framework)
 net.setPreferableBackend(args.backend)
 net.setPreferableTarget(args.target)
 outNames = net.getUnconnectedOutLayersNames()
@@ -102,7 +102,7 @@ def postprocess(frame, outs):
     classIds = []
     confidences = []
     boxes = []
-    if net.getLayer(0).outputNameToIndex('im_info') != -1:  # Faster-RCNN or R-FCN
+    if lastLayer.type == 'DetectionOutput':
         # Network produces output blob with a shape 1x1xNx7 where N is a number of
         # detections and an every detection is a vector of values
         # [batchId, classId, confidence, left, top, right, bottom]
@@ -116,23 +116,13 @@ def postprocess(frame, outs):
                     bottom = int(detection[6])
                     width = right - left + 1
                     height = bottom - top + 1
-                    classIds.append(int(detection[1]) - 1)  # Skip background label
-                    confidences.append(float(confidence))
-                    boxes.append([left, top, width, height])
-    elif lastLayer.type == 'DetectionOutput':
-        # Network produces output blob with a shape 1x1xNx7 where N is a number of
-        # detections and an every detection is a vector of values
-        # [batchId, classId, confidence, left, top, right, bottom]
-        for out in outs:
-            for detection in out[0, 0]:
-                confidence = detection[2]
-                if confidence > confThreshold:
-                    left = int(detection[3] * frameWidth)
-                    top = int(detection[4] * frameHeight)
-                    right = int(detection[5] * frameWidth)
-                    bottom = int(detection[6] * frameHeight)
-                    width = right - left + 1
-                    height = bottom - top + 1
+                    if width * height <= 1:
+                        left = int(detection[3] * frameWidth)
+                        top = int(detection[4] * frameHeight)
+                        right = int(detection[5] * frameWidth)
+                        bottom = int(detection[6] * frameHeight)
+                        width = right - left + 1
+                        height = bottom - top + 1
                     classIds.append(int(detection[1]) - 1)  # Skip background label
                     confidences.append(float(confidence))
                     boxes.append([left, top, width, height])
@@ -182,7 +172,7 @@ def callback(pos):
 
 cv.createTrackbar('Confidence threshold, %', winName, int(confThreshold * 100), 99, callback)
 
-cap = cv.VideoCapture(args.input if args.input else 0)
+cap = cv.VideoCapture(cv.samples.findFileOrKeep(args.input) if args.input else 0)
 while cv.waitKey(1) < 0:
     hasFrame, frame = cap.read()
     if not hasFrame:

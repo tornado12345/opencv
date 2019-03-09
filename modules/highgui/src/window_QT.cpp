@@ -103,7 +103,7 @@ CV_IMPL CvFont cvFontQt(const char* nameFont, int pointSize,CvScalar color,int w
     float       dx;//spacing letter in Qt (0 default) in pixel
     int         line_type;//<- pointSize in Qt
     */
-    CvFont f = {nameFont,color,style,NULL,NULL,NULL,0,0,0,weight,spacing,pointSize};
+    CvFont f = {nameFont,color,style,NULL,NULL,NULL,0,0,0,weight, (float)spacing, pointSize};
     return f;
 }
 
@@ -2556,10 +2556,7 @@ void DefaultViewPort::updateImage(const CvArr* arr)
 
     nbChannelOriginImage = cvGetElemType(mat);
     CV_Assert(origin == 0);
-    cv::Mat src = cv::cvarrToMat(mat), dst = cv::cvarrToMat(image2Draw_mat);
-    cv::cvtColor(src, dst, cv::COLOR_BGR2RGB, dst.channels());
-    CV_Assert(dst.data == image2Draw_mat->data.ptr);
-
+    convertToShow(cv::cvarrToMat(mat), image2Draw_mat);
     viewport()->update();
 }
 

@@ -300,10 +300,11 @@ INSTANTIATE_TEST_CASE_P(/**/, Reproducibility_ResNet50,
 typedef testing::TestWithParam<Target> Reproducibility_SqueezeNet_v1_1;
 TEST_P(Reproducibility_SqueezeNet_v1_1, Accuracy)
 {
+    int targetId = GetParam();
+    if(targetId == DNN_TARGET_OPENCL_FP16)
+        throw SkipTestException("This test does not support FP16");
     Net net = readNetFromCaffe(findDataFile("dnn/squeezenet_v1.1.prototxt", false),
                                findDataFile("dnn/squeezenet_v1.1.caffemodel", false));
-
-    int targetId = GetParam();
     net.setPreferableBackend(DNN_BACKEND_OPENCV);
     net.setPreferableTarget(targetId);
 
@@ -324,7 +325,8 @@ TEST_P(Reproducibility_SqueezeNet_v1_1, Accuracy)
     Mat ref = blobFromNPY(_tf("squeezenet_v1.1_prob.npy"));
     normAssert(ref, out);
 }
-INSTANTIATE_TEST_CASE_P(/**/, Reproducibility_SqueezeNet_v1_1, availableDnnTargets());
+INSTANTIATE_TEST_CASE_P(/**/, Reproducibility_SqueezeNet_v1_1,
+    testing::ValuesIn(getAvailableTargets(DNN_BACKEND_OPENCV)));
 
 TEST(Reproducibility_AlexNet_fp16, Accuracy)
 {
@@ -469,6 +471,7 @@ TEST(Test_Caffe, shared_weights)
 
   net.setInput(blob_1, "input_1");
   net.setInput(blob_2, "input_2");
+  net.setPreferableBackend(DNN_BACKEND_OPENCV);
 
   Mat sum = net.forward();
 
@@ -512,7 +515,11 @@ INSTANTIATE_TEST_CASE_P(Test_Caffe, opencv_face_detector,
 
 TEST_P(Test_Caffe_nets, FasterRCNN_vgg16)
 {
-    if (backend == DNN_BACKEND_INFERENCE_ENGINE && target == DNN_TARGET_MYRIAD)
+    if ((backend == DNN_BACKEND_INFERENCE_ENGINE && target == DNN_TARGET_MYRIAD)
+#if defined(INF_ENGINE_RELEASE) && INF_ENGINE_RELEASE > 2018030000
+     || (backend == DNN_BACKEND_INFERENCE_ENGINE && target == DNN_TARGET_OPENCL_FP16)
+#endif
+    )
         throw SkipTestException("");
     static Mat ref = (Mat_<float>(3, 7) << 0, 2, 0.949398, 99.2454, 210.141, 601.205, 462.849,
                                            0, 7, 0.997022, 481.841, 92.3218, 722.685, 175.953,

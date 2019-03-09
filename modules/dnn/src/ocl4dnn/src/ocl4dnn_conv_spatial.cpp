@@ -638,7 +638,7 @@ void OCL4DNNConvSpatial<Dtype>::generateKey()
                << "p" << pad_w_ << "x" << pad_h_ << "_"
                << "num" << num_ << "_"
                << "M" << M_ << "_"
-               << "activ" << fused_activ_ << "_"
+               << "activ" << (int)fused_activ_ << "_"
                << "eltwise" << fused_eltwise_ << "_"
                << precision;
 
@@ -1826,7 +1826,7 @@ void OCL4DNNConvSpatial<float>::setupConvolution(const UMat &bottom,
                 }
                 else
                 {
-                    CV_LOG_VERBOSE(NULL, "Kernel " << config->kernelName << " pass verification");
+                    CV_LOG_VERBOSE(NULL, 0, "Kernel " << config->kernelName << " pass verification");
                 }
             }
             catch (...)

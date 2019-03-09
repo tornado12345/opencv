@@ -89,7 +89,7 @@ See @ref videoio_overview for more information.
 enum VideoCaptureAPIs {
        CAP_ANY          = 0,            //!< Auto detect == 0
        CAP_VFW          = 200,          //!< Video For Windows (obsolete, removed)
-       CAP_V4L          = 200,          //!< V4L/V4L2 capturing support via libv4l
+       CAP_V4L          = 200,          //!< V4L/V4L2 capturing support
        CAP_V4L2         = CAP_V4L,      //!< Same as CAP_V4L
        CAP_FIREWIRE     = 300,          //!< IEEE 1394 drivers
        CAP_FIREWARE     = CAP_FIREWIRE, //!< Same value as CAP_FIREWIRE
@@ -108,7 +108,8 @@ enum VideoCaptureAPIs {
        CAP_GIGANETIX    = 1300,         //!< Smartek Giganetix GigEVisionSDK
        CAP_MSMF         = 1400,         //!< Microsoft Media Foundation (via videoInput)
        CAP_WINRT        = 1410,         //!< Microsoft Windows Runtime using Media Foundation
-       CAP_INTELPERC    = 1500,         //!< Intel Perceptual Computing SDK
+       CAP_INTELPERC    = 1500,         //!< RealSense (former Intel Perceptual Computing SDK)
+       CAP_REALSENSE    = 1500,         //!< Synonym for CAP_INTELPERC
        CAP_OPENNI2      = 1600,         //!< OpenNI2 (for Kinect)
        CAP_OPENNI2_ASUS = 1610,         //!< OpenNI2 (for Asus Xtion and Occipital Structure sensors)
        CAP_GPHOTO2      = 1700,         //!< gPhoto2 connection
@@ -169,22 +170,13 @@ enum VideoCaptureProperties {
        CAP_PROP_AUTOFOCUS     =39,
        CAP_PROP_SAR_NUM       =40, //!< Sample aspect ratio: num/den (num)
        CAP_PROP_SAR_DEN       =41, //!< Sample aspect ratio: num/den (den)
-       CAP_PROP_BACKEND       =42, //!< current backend (enum VideoCaptureAPIs). Read-only property
-       CAP_CROSSBAR_INPIN_TYPE =43, //!<CrossBar input pin Setting
+       CAP_PROP_BACKEND       =42, //!< Current backend (enum VideoCaptureAPIs). Read-only property
+       CAP_PROP_CHANNEL       =43, //!< Video input or Channel Number (only for those cameras that support)
+       CAP_PROP_AUTO_WB       =44, //!< enable/ disable auto white-balance
+       CAP_PROP_WB_TEMPERATURE=45, //!< white-balance color temperature
 #ifndef CV_DOXYGEN
        CV__CAP_PROP_LATEST
 #endif
-     };
-
-
-/** @brief Generic camera output modes identifier.
-@note Currently, these are supported through the libv4l backend only.
-*/
-enum VideoCaptureModes {
-       CAP_MODE_BGR  = 0, //!< BGR24 (default)
-       CAP_MODE_RGB  = 1, //!< RGB24
-       CAP_MODE_GRAY = 2, //!< Y8
-       CAP_MODE_YUYV = 3  //!< YUYV
      };
 
 /** @brief %VideoWriter generic properties identifier.
@@ -535,7 +527,8 @@ enum { CAP_PROP_INTELPERC_PROFILE_COUNT               = 11001,
 //! Intel Perceptual Streams
 enum { CAP_INTELPERC_DEPTH_GENERATOR = 1 << 29,
        CAP_INTELPERC_IMAGE_GENERATOR = 1 << 28,
-       CAP_INTELPERC_GENERATORS_MASK = CAP_INTELPERC_DEPTH_GENERATOR + CAP_INTELPERC_IMAGE_GENERATOR
+       CAP_INTELPERC_IR_GENERATOR    = 1 << 27,
+       CAP_INTELPERC_GENERATORS_MASK = CAP_INTELPERC_DEPTH_GENERATOR + CAP_INTELPERC_IMAGE_GENERATOR + CAP_INTELPERC_IR_GENERATOR
      };
 
 enum { CAP_INTELPERC_DEPTH_MAP              = 0, //!< Each pixel is a 16-bit integer. The value indicates the distance from an object to the camera's XY plane or the Cartesian depth.

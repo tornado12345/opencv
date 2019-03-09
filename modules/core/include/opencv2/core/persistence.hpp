@@ -320,7 +320,7 @@ public:
         BASE64      = 64,     //!< flag, write rawdata in Base64 by default. (consider using WRITE_BASE64)
         WRITE_BASE64 = BASE64 | WRITE, //!< flag, enable both WRITE and BASE64
     };
-    enum
+    enum State
     {
         UNDEFINED      = 0,
         VALUE_EXPECTED = 1,
@@ -526,6 +526,11 @@ public:
      */
     CV_WRAP_AS(at) FileNode operator[](int i) const;
 
+    /** @brief Returns keys of a mapping node.
+     @returns Keys of a mapping node.
+     */
+    CV_WRAP std::vector<String> keys() const;
+
     /** @brief Returns type of the node.
      @returns Type of the node. See FileNode::Type
      */
@@ -560,7 +565,7 @@ public:
     //! returns the node content as double
     operator double() const;
     //! returns the node content as text string
-    operator std::string() const;
+    inline operator std::string() const { return this->string(); }
 
     static bool isMap(int flags);
     static bool isSeq(int flags);
@@ -594,7 +599,7 @@ public:
     //! Simplified reading API to use with bindings.
     CV_WRAP double real() const;
     //! Simplified reading API to use with bindings.
-    CV_WRAP String string() const;
+    CV_WRAP std::string string() const;
     //! Simplified reading API to use with bindings.
     CV_WRAP Mat mat() const;
 
@@ -637,8 +642,6 @@ public:
 
     //! returns the currently observed element
     FileNode operator *() const;
-    //! accesses the currently observed element methods
-    FileNode operator ->() const;
 
     //! moves iterator to the next node
     FileNodeIterator& operator ++ ();
@@ -749,6 +752,17 @@ template<typename _Tp, int cn> static inline void read(const FileNode& node, Vec
 {
     std::vector<_Tp> temp; FileNodeIterator it = node.begin(); it >> temp;
     value = temp.size() != cn ? default_value : Vec<_Tp, cn>(&temp[0]);
+}
+
+template<typename _Tp, int m, int n> static inline void read(const FileNode& node, Matx<_Tp, m, n>& value, const Matx<_Tp, m, n>& default_matx = Matx<_Tp, m, n>())
+{
+    Mat temp;
+    read(node, temp); // read as a Mat class
+
+    if (temp.empty())
+        value = default_matx;
+    else
+        value = Matx<_Tp, m, n>(temp);
 }
 
 template<typename _Tp> static inline void read(const FileNode& node, Scalar_<_Tp>& value, const Scalar_<_Tp>& default_value)
@@ -931,6 +945,12 @@ void write(FileStorage& fs, const Vec<_Tp, cn>& v )
         write(fs, v.val[i]);
 }
 
+template<typename _Tp, int m, int n> static inline
+void write(FileStorage& fs, const Matx<_Tp, m, n>& x )
+{
+    write(fs, Mat(x)); // write as a Mat class
+}
+
 template<typename _Tp> static inline
 void write(FileStorage& fs, const Scalar_<_Tp>& s )
 {
@@ -994,6 +1014,12 @@ void write(FileStorage& fs, const String& name, const Vec<_Tp, cn>& v )
 {
     cv::internal::WriteStructContext ws(fs, name, FileNode::SEQ+FileNode::FLOW);
     write(fs, v);
+}
+
+template<typename _Tp, int m, int n> static inline
+void write(FileStorage& fs, const String& name, const Matx<_Tp, m, n>& x )
+{
+    write(fs, name, Mat(x)); // write as a Mat class
 }
 
 template<typename _Tp> static inline

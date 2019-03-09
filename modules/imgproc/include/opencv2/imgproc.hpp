@@ -204,6 +204,10 @@ namespace cv
 //! @addtogroup imgproc_filter
 //! @{
 
+enum SpecialFilter {
+    FILTER_SCHARR = -1
+};
+
 //! type of morphological operation
 enum MorphTypes{
     MORPH_ERODE    = 0, //!< see #erode
@@ -1244,14 +1248,12 @@ protected:
 //! @addtogroup imgproc_feature
 //! @{
 
-/** @example samples/cpp/lsd_lines.cpp
-An example using the LineSegmentDetector
-\image html building_lsd.png "Sample output image" width=434 height=300
-*/
-
 /** @brief Line segment detector class
 
 following the algorithm described at @cite Rafael12 .
+
+@note Implementation has been removed due original code license conflict
+
 */
 class CV_EXPORTS_W LineSegmentDetector : public Algorithm
 {
@@ -1315,6 +1317,8 @@ to edit those, as to tailor it for their own application.
 is chosen.
 @param _density_th Minimal density of aligned region points in the enclosing rectangle.
 @param _n_bins Number of bins in pseudo-ordering of gradient modulus.
+
+@note Implementation has been removed due original code license conflict
  */
 CV_EXPORTS_W Ptr<LineSegmentDetector> createLineSegmentDetector(
     int _refine = LSD_REFINE_STD, double _scale = 0.8,
@@ -1349,14 +1353,14 @@ CV_EXPORTS_W Mat getGaussianKernel( int ksize, double sigma, int ktype = CV_64F 
 /** @brief Returns filter coefficients for computing spatial image derivatives.
 
 The function computes and returns the filter coefficients for spatial image derivatives. When
-`ksize=CV_SCHARR`, the Scharr \f$3 \times 3\f$ kernels are generated (see #Scharr). Otherwise, Sobel
+`ksize=FILTER_SCHARR`, the Scharr \f$3 \times 3\f$ kernels are generated (see #Scharr). Otherwise, Sobel
 kernels are generated (see #Sobel). The filters are normally passed to #sepFilter2D or to
 
 @param kx Output matrix of row filter coefficients. It has the type ktype .
 @param ky Output matrix of column filter coefficients. It has the type ktype .
 @param dx Derivative order in respect of x.
 @param dy Derivative order in respect of y.
-@param ksize Aperture size. It can be CV_SCHARR, 1, 3, 5, or 7.
+@param ksize Aperture size. It can be FILTER_SCHARR, 1, 3, 5, or 7.
 @param normalize Flag indicating whether to normalize (scale down) the filter coefficients or not.
 Theoretically, the coefficients should have the denominator \f$=2^{ksize*2-dx-dy-2}\f$. If you are
 going to filter floating-point images, you are likely to use the normalized kernels. But if you
@@ -1623,7 +1627,7 @@ calculate the derivative. When \f$\texttt{ksize = 1}\f$, the \f$3 \times 1\f$ or
 kernel is used (that is, no Gaussian smoothing is done). `ksize = 1` can only be used for the first
 or the second x- or y- derivatives.
 
-There is also the special value `ksize = #CV_SCHARR (-1)` that corresponds to the \f$3\times3\f$ Scharr
+There is also the special value `ksize = #FILTER_SCHARR (-1)` that corresponds to the \f$3\times3\f$ Scharr
 filter that may give more accurate results than the \f$3\times3\f$ Sobel. The Scharr aperture is
 
 \f[\vecthreethree{-3}{0}{3}{-10}{0}{10}{-3}{0}{3}\f]
@@ -1694,7 +1698,7 @@ call
 
 is equivalent to
 
-\f[\texttt{Sobel(src, dst, ddepth, dx, dy, CV_SCHARR, scale, delta, borderType)} .\f]
+\f[\texttt{Sobel(src, dst, ddepth, dx, dy, FILTER_SCHARR, scale, delta, borderType)} .\f]
 
 @param src input image.
 @param dst output image of the same size and the same number of channels as src.
@@ -4197,7 +4201,14 @@ enum ColormapTypes
     COLORMAP_HSV = 9, //!< ![HSV](pics/colormaps/colorscale_hsv.jpg)
     COLORMAP_PINK = 10, //!< ![pink](pics/colormaps/colorscale_pink.jpg)
     COLORMAP_HOT = 11, //!< ![hot](pics/colormaps/colorscale_hot.jpg)
-    COLORMAP_PARULA = 12 //!< ![parula](pics/colormaps/colorscale_parula.jpg)
+    COLORMAP_PARULA = 12, //!< ![parula](pics/colormaps/colorscale_parula.jpg)
+    COLORMAP_MAGMA = 13, //!< ![magma](pics/colormaps/colorscale_magma.jpg)
+    COLORMAP_INFERNO = 14, //!< ![inferno](pics/colormaps/colorscale_inferno.jpg)
+    COLORMAP_PLASMA = 15, //!< ![plasma](pics/colormaps/colorscale_plasma.jpg)
+    COLORMAP_VIRIDIS = 16, //!< ![viridis](pics/colormaps/colorscale_viridis.jpg)
+    COLORMAP_CIVIDIS = 17, //!< ![cividis](pics/colormaps/colorscale_cividis.jpg)
+    COLORMAP_TWILIGHT = 18, //!< ![twilight](pics/colormaps/colorscale_twilight.jpg)
+    COLORMAP_TWILIGHT_SHIFTED = 19 //!< ![twilight shifted](pics/colormaps/colorscale_twilight_shifted.jpg)
 };
 
 /** @example samples/cpp/falsecolor.cpp
@@ -4655,7 +4666,7 @@ LineIterator it2 = it;
 vector<Vec3b> buf(it.count);
 
 for(int i = 0; i < it.count; i++, ++it)
-    buf[i] = *(const Vec3b)*it;
+    buf[i] = *(const Vec3b*)*it;
 
 // alternative way of iterating through the line
 for(int i = 0; i < it2.count; i++, ++it2)
@@ -4678,7 +4689,15 @@ public:
     not to depend on the ordering of pt1 and pt2 parameters
     */
     LineIterator( const Mat& img, Point pt1, Point pt2,
-                  int connectivity = 8, bool leftToRight = false );
+                  int connectivity = 8, bool leftToRight = false ) {
+      init(img.size(), img.type(), (uchar*)img.ptr(), img.step1()*img.elemSize1(), pt1, pt2, connectivity, leftToRight);
+    }
+    LineIterator( const Size& size, int type, Point pt1, Point pt2,
+                  int connectivity = 8, bool leftToRight = false ) {
+      init(size, type, 0, CV_ELEM_SIZE(type)*size.width, pt1, pt2, connectivity, leftToRight);
+    }
+    void init(const Size& size, int type, uchar* data, size_t dataStep, Point pt1, Point pt2, int connectivity = 8, bool leftToRight = false);
+
     /** @brief returns pointer to the current pixel
     */
     uchar* operator *();
@@ -4707,7 +4726,7 @@ public:
 inline
 uchar* LineIterator::operator *()
 {
-    return ptr;
+    return !ptr0 ? 0 : ptr;//when no Mat is attached, ptr is just a dummy address and should not be dereferenced
 }
 
 inline

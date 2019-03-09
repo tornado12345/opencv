@@ -28,9 +28,20 @@ namespace gapi
 {
 namespace fluid
 {
+    /**
+     * \addtogroup gapi_std_backends G-API Standard backends
+     * @{
+     */
+    /**
+     * @brief Get a reference to Fluid backend.
+     *
+     * @sa gapi_std_backends
+     */
     GAPI_EXPORTS cv::gapi::GBackend backend();
+    /** @} */
 } // namespace flud
 } // namespace gapi
+
 
 class GAPI_EXPORTS GFluidKernel
 {
@@ -38,7 +49,8 @@ public:
     enum class Kind
     {
         Filter,
-        Resize
+        Resize,
+        NV12toRGB
     };
 
     // This function is a generic "doWork" callback
