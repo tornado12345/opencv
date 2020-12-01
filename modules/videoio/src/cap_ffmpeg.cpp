@@ -41,11 +41,12 @@
 
 #include "precomp.hpp"
 
-#if defined(HAVE_FFMPEG)
+#if !defined(HAVE_FFMPEG)
+#error "Build configuration error"
+#endif
 
 #include <string>
 
-#if !defined(HAVE_FFMPEG_WRAPPER)
 #include "cap_ffmpeg_impl.hpp"
 
 #define icvCreateFileCapture_FFMPEG_p cvCreateFileCapture_FFMPEG
@@ -57,152 +58,6 @@
 #define icvCreateVideoWriter_FFMPEG_p cvCreateVideoWriter_FFMPEG
 #define icvReleaseVideoWriter_FFMPEG_p cvReleaseVideoWriter_FFMPEG
 #define icvWriteFrame_FFMPEG_p cvWriteFrame_FFMPEG
-
-#else
-
-#include "cap_ffmpeg_api.hpp"
-
-namespace cv { namespace {
-
-static CvCreateFileCapture_Plugin icvCreateFileCapture_FFMPEG_p = 0;
-static CvReleaseCapture_Plugin icvReleaseCapture_FFMPEG_p = 0;
-static CvGrabFrame_Plugin icvGrabFrame_FFMPEG_p = 0;
-static CvRetrieveFrame_Plugin icvRetrieveFrame_FFMPEG_p = 0;
-static CvSetCaptureProperty_Plugin icvSetCaptureProperty_FFMPEG_p = 0;
-static CvGetCaptureProperty_Plugin icvGetCaptureProperty_FFMPEG_p = 0;
-static CvCreateVideoWriter_Plugin icvCreateVideoWriter_FFMPEG_p = 0;
-static CvReleaseVideoWriter_Plugin icvReleaseVideoWriter_FFMPEG_p = 0;
-static CvWriteFrame_Plugin icvWriteFrame_FFMPEG_p = 0;
-
-static cv::Mutex _icvInitFFMPEG_mutex;
-
-#if defined _WIN32
-static const HMODULE cv_GetCurrentModule()
-{
-    HMODULE h = 0;
-#if _WIN32_WINNT >= 0x0501
-    ::GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        reinterpret_cast<LPCTSTR>(cv_GetCurrentModule),
-        &h);
-#endif
-    return h;
-}
-#endif
-
-class icvInitFFMPEG
-{
-public:
-    static void Init()
-    {
-        cv::AutoLock al(_icvInitFFMPEG_mutex);
-        static icvInitFFMPEG init;
-    }
-
-private:
-    #if defined _WIN32
-    HMODULE icvFFOpenCV;
-
-    ~icvInitFFMPEG()
-    {
-        if (icvFFOpenCV)
-        {
-            FreeLibrary(icvFFOpenCV);
-            icvFFOpenCV = 0;
-        }
-    }
-    #endif
-
-    icvInitFFMPEG()
-    {
-#if defined _WIN32
-        const wchar_t* module_name_ = L"opencv_ffmpeg"
-            CVAUX_STRW(CV_MAJOR_VERSION) CVAUX_STRW(CV_MINOR_VERSION) CVAUX_STRW(CV_SUBMINOR_VERSION)
-        #if (defined _MSC_VER && defined _M_X64) || (defined __GNUC__ && defined __x86_64__)
-            L"_64"
-        #endif
-            L".dll";
-    # ifdef WINRT
-        icvFFOpenCV = LoadPackagedLibrary( module_name_, 0 );
-    # else
-        const std::wstring module_name(module_name_);
-
-        const wchar_t* ffmpeg_env_path = _wgetenv(L"OPENCV_FFMPEG_DLL_DIR");
-        std::wstring module_path =
-                ffmpeg_env_path
-                ? ((std::wstring(ffmpeg_env_path) + L"\\") + module_name)
-                : module_name;
-
-        icvFFOpenCV = LoadLibraryW(module_path.c_str());
-        if(!icvFFOpenCV && !ffmpeg_env_path)
-        {
-            HMODULE m = cv_GetCurrentModule();
-            if (m)
-            {
-                wchar_t path[MAX_PATH];
-                const size_t path_size = sizeof(path)/sizeof(*path);
-                size_t sz = GetModuleFileNameW(m, path, path_size);
-                /* Don't handle paths longer than MAX_PATH until that becomes a real issue */
-                if (sz > 0 && sz < path_size)
-                {
-                    wchar_t* s = wcsrchr(path, L'\\');
-                    if (s)
-                    {
-                        s[0] = 0;
-                        module_path = (std::wstring(path) + L"\\") + module_name;
-                        icvFFOpenCV = LoadLibraryW(module_path.c_str());
-                    }
-                }
-            }
-        }
-    # endif
-
-        if( icvFFOpenCV )
-        {
-            icvCreateFileCapture_FFMPEG_p =
-                (CvCreateFileCapture_Plugin)GetProcAddress(icvFFOpenCV, "cvCreateFileCapture_FFMPEG");
-            icvReleaseCapture_FFMPEG_p =
-                (CvReleaseCapture_Plugin)GetProcAddress(icvFFOpenCV, "cvReleaseCapture_FFMPEG");
-            icvGrabFrame_FFMPEG_p =
-                (CvGrabFrame_Plugin)GetProcAddress(icvFFOpenCV, "cvGrabFrame_FFMPEG");
-            icvRetrieveFrame_FFMPEG_p =
-                (CvRetrieveFrame_Plugin)GetProcAddress(icvFFOpenCV, "cvRetrieveFrame_FFMPEG");
-            icvSetCaptureProperty_FFMPEG_p =
-                (CvSetCaptureProperty_Plugin)GetProcAddress(icvFFOpenCV, "cvSetCaptureProperty_FFMPEG");
-            icvGetCaptureProperty_FFMPEG_p =
-                (CvGetCaptureProperty_Plugin)GetProcAddress(icvFFOpenCV, "cvGetCaptureProperty_FFMPEG");
-            icvCreateVideoWriter_FFMPEG_p =
-                (CvCreateVideoWriter_Plugin)GetProcAddress(icvFFOpenCV, "cvCreateVideoWriter_FFMPEG");
-            icvReleaseVideoWriter_FFMPEG_p =
-                (CvReleaseVideoWriter_Plugin)GetProcAddress(icvFFOpenCV, "cvReleaseVideoWriter_FFMPEG");
-            icvWriteFrame_FFMPEG_p =
-                (CvWriteFrame_Plugin)GetProcAddress(icvFFOpenCV, "cvWriteFrame_FFMPEG");
-# endif // _WIN32
-#if 0
-            if( icvCreateFileCapture_FFMPEG_p != 0 &&
-                icvReleaseCapture_FFMPEG_p != 0 &&
-                icvGrabFrame_FFMPEG_p != 0 &&
-                icvRetrieveFrame_FFMPEG_p != 0 &&
-                icvSetCaptureProperty_FFMPEG_p != 0 &&
-                icvGetCaptureProperty_FFMPEG_p != 0 &&
-                icvCreateVideoWriter_FFMPEG_p != 0 &&
-                icvReleaseVideoWriter_FFMPEG_p != 0 &&
-                icvWriteFrame_FFMPEG_p != 0 )
-            {
-                printf("Successfully initialized ffmpeg plugin!\n");
-            }
-            else
-            {
-                printf("Failed to load FFMPEG plugin: module handle=%p\n", icvFFOpenCV);
-            }
-#endif
-        }
-    }
-};
-
-
-}} // namespace
-#endif // HAVE_FFMPEG_WRAPPER
-
 
 
 namespace cv {
@@ -235,7 +90,11 @@ public:
         if (!ffmpegCapture ||
            !icvRetrieveFrame_FFMPEG_p(ffmpegCapture, &data, &step, &width, &height, &cn))
             return false;
-        cv::Mat(height, width, CV_MAKETYPE(CV_8U, cn), data, step).copyTo(frame);
+
+        cv::Mat tmp(height, width, CV_MAKETYPE(CV_8U, cn), data, step);
+        this->rotateFrame(tmp);
+        tmp.copyTo(frame);
+
         return true;
     }
     virtual bool open( const cv::String& filename )
@@ -247,11 +106,7 @@ public:
     }
     virtual void close()
     {
-        if (ffmpegCapture
-#if defined(HAVE_FFMPEG_WRAPPER)
-                && icvReleaseCapture_FFMPEG_p
-#endif
-)
+        if (ffmpegCapture)
             icvReleaseCapture_FFMPEG_p( &ffmpegCapture );
         CV_Assert(ffmpegCapture == 0);
         ffmpegCapture = 0;
@@ -262,17 +117,36 @@ public:
 
 protected:
     CvCapture_FFMPEG* ffmpegCapture;
+
+    void rotateFrame(cv::Mat &mat) const
+    {
+        bool rotation_auto = 0 != getProperty(CAP_PROP_ORIENTATION_AUTO);
+        int rotation_angle = static_cast<int>(getProperty(CAP_PROP_ORIENTATION_META));
+
+        if(!rotation_auto || rotation_angle%360 == 0)
+        {
+            return;
+        }
+
+        cv::RotateFlags flag;
+        if(rotation_angle == 90 || rotation_angle == -270) { // Rotate clockwise 90 degrees
+            flag = cv::ROTATE_90_CLOCKWISE;
+        } else if(rotation_angle == 270 || rotation_angle == -90) { // Rotate clockwise 270 degrees
+            flag = cv::ROTATE_90_COUNTERCLOCKWISE;
+        } else if(rotation_angle == 180 || rotation_angle == -180) { // Rotate clockwise 180 degrees
+            flag = cv::ROTATE_180;
+        } else { // Unsupported rotation
+            return;
+        }
+
+        cv::rotate(mat, mat, flag);
+    }
 };
 
 } // namespace
 
 cv::Ptr<cv::IVideoCapture> cvCreateFileCapture_FFMPEG_proxy(const std::string &filename)
 {
-#if defined(HAVE_FFMPEG_WRAPPER)
-    icvInitFFMPEG::Init();
-    if (!icvCreateFileCapture_FFMPEG_p)
-        return cv::Ptr<cv::IVideoCapture>();
-#endif
     cv::Ptr<CvCapture_FFMPEG_proxy> capture = cv::makePtr<CvCapture_FFMPEG_proxy>(filename);
     if (capture && capture->isOpened())
         return capture;
@@ -308,11 +182,7 @@ public:
 
     virtual void close()
     {
-        if (ffmpegWriter
-#if defined(HAVE_FFMPEG_WRAPPER)
-                && icvReleaseVideoWriter_FFMPEG_p
-#endif
-        )
+        if (ffmpegWriter)
             icvReleaseVideoWriter_FFMPEG_p( &ffmpegWriter );
         CV_Assert(ffmpegWriter == 0);
         ffmpegWriter = 0;
@@ -328,14 +198,12 @@ protected:
 
 } // namespace
 
-cv::Ptr<cv::IVideoWriter> cvCreateVideoWriter_FFMPEG_proxy(const std::string& filename, int fourcc, double fps, const cv::Size &frameSize, bool isColor)
+cv::Ptr<cv::IVideoWriter> cvCreateVideoWriter_FFMPEG_proxy(const std::string& filename, int fourcc,
+                                                           double fps, const cv::Size& frameSize,
+                                                           const VideoWriterParameters& params)
 {
-#if defined(HAVE_FFMPEG_WRAPPER)
-    icvInitFFMPEG::Init();
-    if (!icvCreateVideoWriter_FFMPEG_p)
-        return cv::Ptr<cv::IVideoWriter>();
-#endif
-    cv::Ptr<CvVideoWriter_FFMPEG_proxy> writer = cv::makePtr<CvVideoWriter_FFMPEG_proxy>(filename, fourcc, fps, frameSize, isColor != 0);
+    const bool isColor = params.get(VIDEOWRITER_PROP_IS_COLOR, true);
+    cv::Ptr<CvVideoWriter_FFMPEG_proxy> writer = cv::makePtr<CvVideoWriter_FFMPEG_proxy>(filename, fourcc, fps, frameSize, isColor);
     if (writer && writer->isOpened())
         return writer;
     return cv::Ptr<cv::IVideoWriter>();
@@ -343,7 +211,7 @@ cv::Ptr<cv::IVideoWriter> cvCreateVideoWriter_FFMPEG_proxy(const std::string& fi
 
 } // namespace
 
-#endif // defined(HAVE_FFMPEG)
+
 
 //==================================================================================================
 

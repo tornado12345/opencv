@@ -1,6 +1,8 @@
 Introduction to Support Vector Machines {#tutorial_introduction_to_svm}
 =======================================
 
+@next_tutorial{tutorial_non_linear_svms}
+
 Goal
 ----
 
@@ -51,7 +53,7 @@ Let's introduce the notation used to define formally a hyperplane:
 
 where \f$\beta\f$ is known as the *weight vector* and \f$\beta_{0}\f$ as the *bias*.
 
-@sa A more in depth description of this and hyperplanes you can find in the section 4.5 (*Separating
+@note A more in depth description of this and hyperplanes you can find in the section 4.5 (*Separating
 Hyperplanes*) of the book: *Elements of Statistical Learning* by T. Hastie, R. Tibshirani and J. H.
 Friedman (@cite HTF01).
 
@@ -93,8 +95,6 @@ the weight vector \f$\beta\f$ and the bias \f$\beta_{0}\f$ of the optimal hyperp
 
 Source Code
 -----------
-
-@note The following code has been implemented with OpenCV 3.0 classes and functions. An equivalent version of the code using OpenCV 2.4 can be found in [this page.](http://docs.opencv.org/2.4/doc/tutorials/ml/introduction_to_svm/introduction_to_svm.html#introductiontosvms)
 
 @add_toggle_cpp
 -   **Downloadable code**: Click

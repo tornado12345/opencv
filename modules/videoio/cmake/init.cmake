@@ -12,14 +12,20 @@ function(ocv_add_external_target name inc link def)
   set_target_properties(ocv.3rdparty.${name} PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${inc}"
     INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${inc}"
-    INTERFACE_LINK_LIBRARIES "${link}"
     INTERFACE_COMPILE_DEFINITIONS "${def}")
+  # When cmake version is greater than or equal to 3.11, INTERFACE_LINK_LIBRARIES no longer applies to interface library
+  # See https://github.com/opencv/opencv/pull/18658
+  if (CMAKE_VERSION VERSION_LESS 3.11)
+    set_target_properties(ocv.3rdparty.${name} PROPERTIES
+      INTERFACE_LINK_LIBRARIES "${link}")
+  else()
+    target_link_libraries(ocv.3rdparty.${name} INTERFACE ${link})
+  endif()
+  #
   if(NOT BUILD_SHARED_LIBS)
     install(TARGETS ocv.3rdparty.${name} EXPORT OpenCVModules)
   endif()
 endfunction()
-
-include(FindPkgConfig)
 
 add_backend("ffmpeg" WITH_FFMPEG)
 add_backend("gstreamer" WITH_GSTREAMER)
@@ -32,6 +38,7 @@ add_backend("msdk" WITH_MFX)
 add_backend("openni2" WITH_OPENNI2)
 add_backend("pvapi" WITH_PVAPI)
 add_backend("realsense" WITH_LIBREALSENSE)
+add_backend("ueye" WITH_UEYE)
 add_backend("ximea" WITH_XIMEA)
 add_backend("xine" WITH_XINE)
 
@@ -40,3 +47,5 @@ add_backend("ios" WITH_CAP_IOS)
 
 add_backend("dshow" WITH_DSHOW)
 add_backend("msmf" WITH_MSMF)
+
+add_backend("android_mediandk" WITH_ANDROID_MEDIANDK)
